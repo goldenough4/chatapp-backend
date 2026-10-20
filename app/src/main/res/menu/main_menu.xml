@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_new_group"
+        android:title="Establish Circle"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_new_broadcast"
+        android:title="Broadcast Signal"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_linked_devices"
+        android:title="Tethered Hubs"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_starred"
+        android:title="Saved Transcripts"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_read_all"
+        android:title="Clear Unread"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_settings"
+        android:title="App Configuration"
+        app:showAsAction="never" />
+</menu>

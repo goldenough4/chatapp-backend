@@ -1,0 +1,85 @@
+[versions]
+agp = "9.3.3"
+kotlin = "2.2.10"
+ksp = "2.3.2"
+googleServices = "4.5.0"
+coreKtx = "1.15.0"
+appcompat = "1.8.0"
+material = "1.14.0"
+constraintlayout = "2.1.4"
+recyclerview = "1.3.2"
+kotlinxCoroutinesAndroid = "1.9.0"
+firebaseBom = "33.10.0"
+activity = "1.13.0"
+okhttp = "4.12.0"
+lifecycle = "2.11.0"
+playServicesAuth = "21.6.0"
+media3 = "1.11.0"
+glide = "4.16.0"
+json = "20260814"
+googleAuthLibrary = "1.50.0"
+jackson = "2.2.0"
+grpc = "1.62.2"
+circleimageview = "3.1.0"
+streamWebrtc = "1.3.10"
+testExtJunit = "1.3.0"
+espressoCore = "3.7.0"
+socketIo = "2.1.2"
+
+[libraries]
+#---------- Android Instrumented Tests ----------
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "testExtJunit" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+
+# ---------- AndroidX ----------
+core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+junit = { group = "junit", name = "junit", version = "4.13.2" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
+androidx-activity = { group = "androidx.activity", name = "activity-ktx", version.ref = "activity" }
+lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
+
+# ---------- Coroutines ----------
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesAndroid" }
+
+# ---------- Firebase ----------
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
+
+# ---------- Networking ----------
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+json = { group = "org.json", name = "json", version.ref = "json" }
+jackson = { group = "com.google.http-client", name = "google-http-client-jackson2", version.ref = "jackson" }
+socket-io-client = { group = "io.socket", name = "socket.io-client", version.ref = "socketIo" }
+
+# ---------- External ----------
+circleimageview = { group = "de.hdodenhof", name = "circleimageview", version.ref = "circleimageview" }
+webrtc = { group = "io.getstream", name = "stream-webrtc-android", version.ref = "streamWebrtc" }
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
+media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
+glide-compiler = { group = "com.github.bumptech.glide", name = "compiler", version.ref = "glide" }
+google-auth-library = { group = "com.google.auth", name = "google-auth-library-oauth2-http", version.ref = "googleAuthLibrary" }
+
+# ---------- gRPC (Force version alignment for Firestore) ----------
+grpc-android = { group = "io.grpc", name = "grpc-android", version.ref = "grpc" }
+grpc-okhttp = { group = "io.grpc", name = "grpc-okhttp", version.ref = "grpc" }
+grpc-stub = { group = "io.grpc", name = "grpc-stub", version.ref = "grpc" }
+grpc-protobuf-lite = { group = "io.grpc", name = "grpc-protobuf-lite", version.ref = "grpc" }
+grpc-core = { group = "io.grpc", name = "grpc-core", version.ref = "grpc" }
+grpc-api = { group = "io.grpc", name = "grpc-api", version.ref = "grpc" }
+grpc-context = { group = "io.grpc", name = "grpc-context", version.ref = "grpc" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

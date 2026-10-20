@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1010427867097",
+    "firebase_url": "https://chatapp-adaae-default-rtdb.firebaseio.com",
+    "project_id": "chatapp-adaae",
+    "storage_bucket": "chatapp-adaae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1010427867097:android:ed28c48b7bdcb5da9373c8",
+        "android_client_info": {
+          "package_name": "com.gold.chatapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjq1pjleuDIkdMjJpEerQg5WV7aFadM3I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

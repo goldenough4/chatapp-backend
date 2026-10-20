@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main_chat_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#E5DDD5">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#075E54">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/chat_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:titleTextColor="@android:color/white">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/toolbar_click_area"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:id="@+id/chat_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFFFFF"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        tools:text="Chat" />
+                </LinearLayout>
+
+                <ImageButton
+                    android:id="@+id/btn_chat_video_call"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Video Call"
+                    android:src="@android:drawable/ic_menu_camera"
+                    app:tint="#FFFFFF" />
+
+                <ImageButton
+                    android:id="@+id/btn_chat_voice_call"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Voice Call"
+                    android:src="@android:drawable/ic_menu_call"
+                    app:tint="#FFFFFF" />
+            </LinearLayout>
+        </com.google.android.material.appbar.MaterialToolbar>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/messages_recycler"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/input_area"
+        android:layout_below="@id/app_bar"
+        android:padding="8dp" />
+
+    <LinearLayout
+        android:id="@+id/input_area"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/text_input_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/message_input_bg"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingEnd="8dp">
+
+                <EditText
+                    android:id="@+id/message_input"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:hint="@string/type_a_message"
+                    android:importantForAutofill="no"
+                    android:inputType="textShortMessage"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp" />
+
+                <ImageButton
+                    android:id="@+id/camera_button"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/select_media"
+                    android:src="@android:drawable/ic_menu_camera"
+                    app:tint="#999999" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/recording_layout"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/message_input_bg"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/red_dot"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@string/recording_status"
+                    android:src="@android:drawable/presence_online"
+                    app:tint="#FF0000" />
+
+                <TextView
+                    android:id="@+id/recording_timer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/recording_timer_initial"
+                    android:textColor="#000000"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/slide_to_cancel_text"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="@string/slide_to_cancel"
+                    android:textColor="#999999" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <ImageButton
+            android:id="@+id/record_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/message_input_bg"
+            android:contentDescription="@string/record_voice_message"
+            android:src="@android:drawable/ic_btn_speak_now"
+            app:tint="#075E54" />
+
+        <ImageButton
+            android:id="@+id/send_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/message_input_bg"
+            android:contentDescription="@string/send_message"
+            android:src="@android:drawable/ic_menu_send"
+            android:visibility="gone"
+            app:tint="#075E54" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/lock_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_above="@id/input_area"
+        android:layout_alignParentEnd="true"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="10dp"
+        android:contentDescription="@string/lock_recording"
+        android:src="@android:drawable/ic_lock_idle_lock"
+        android:visibility="gone"
+        app:tint="#999999" />
+
+    <ImageView
+        android:id="@+id/delete_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_above="@id/input_area"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="10dp"
+        android:layout_toStartOf="@id/lock_icon"
+        android:contentDescription="@string/delete_recording"
+        android:src="@android:drawable/ic_menu_delete"
+        android:visibility="gone"
+        app:tint="#FF0000" />
+
+</RelativeLayout>

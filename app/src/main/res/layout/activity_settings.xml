@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F8F9FA"
+    android:fitsSystemWindows="true">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#075E54">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/settings_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:title="Settings"
+            app:titleTextColor="@android:color/white" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingBottom="100dp"
+        android:overScrollMode="never"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <!-- Profile Header Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/profile_header_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:backgroundTint="@android:color/white"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="4dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="20dp"
+                    android:gravity="center_vertical">
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="70dp"
+                        android:layout_height="70dp"
+                        app:cardCornerRadius="35dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#E0E0E0"
+                        app:strokeWidth="1dp">
+                        <ImageView
+                            android:id="@+id/header_profile_image"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/ic_default_user"
+                            android:contentDescription="Profile" />
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="20dp">
+
+                        <TextView
+                            android:id="@+id/header_user_name"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#1A1A1A"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:text="My Profile" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#616161"
+                            android:textSize="14sp"
+                            android:layout_marginTop="4dp"
+                            android:text="Status, account settings and more" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@android:drawable/ic_menu_edit"
+                        app:tint="#BDBDBD"
+                        android:contentDescription="Edit" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Settings List Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="4dp"
+                android:layout_marginTop="12dp"
+                android:backgroundTint="@android:color/white"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="8dp">
+
+                    <!-- Subscriptions -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/star_big_on" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Subscriptions" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Explore premium benefits" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Linked devices -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_share" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Linked devices" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Use app on other devices" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Account -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_lock_power_off" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Account" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Security notifications, change number" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Privacy -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_lock_idle_lock" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Privacy" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Blocked accounts, disappearing messages" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Lists -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_sort_by_size" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Lists" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Manage people and groups" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Chats -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/sym_action_chat" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chats" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chat history, backup" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Appearance -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_gallery" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Appearance" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chat theme, app icon, app theme" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Notifications -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_popup_sync" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Notifications" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Message, group &amp; call tones" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Storage and data -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_save" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Storage and data" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Network usage, auto-download" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Parental controls -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_view" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Parental controls" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Settings for your family" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Accessibility -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_zoom" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Accessibility" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Increase contrast, animation" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- App language -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_mapmode" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="App language" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Device's language" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Help and feedback -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_help" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Help and feedback" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Help center, contact us, privacy policy" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Invite a friend -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_send" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Invite a friend" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Share the chat circle experience" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- App updates -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/stat_notify_sync" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="App updates" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Check for newest security versions" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Accounts Center -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp" android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true">
+                        <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@android:drawable/ic_menu_info_details" app:tint="#075E54"/>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="20dp">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Accounts Center" android:textColor="#212121" android:textSize="16sp" android:textStyle="bold"/>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Manage connected metadata and profiles" android:textColor="#757575" android:textSize="13sp" android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginVertical="24dp"
+                android:text="from Gold Circle"
+                android:textColor="#9E9E9E"
+                android:textSize="12sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.1" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

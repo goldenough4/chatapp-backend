@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_share"
+        android:title="Share"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_edit"
+        android:title="Edit"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_view_address_book"
+        android:title="View in address book"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_verify_security"
+        android:title="Verify security code"
+        app:showAsAction="never" />
+</menu>

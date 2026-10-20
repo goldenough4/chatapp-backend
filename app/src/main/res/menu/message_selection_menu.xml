@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_reply_msg"
+        android:icon="@drawable/ic_reply"
+        android:title="Reply"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_star_msg"
+        android:icon="@drawable/ic_star"
+        android:title="Star"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_delete_msg"
+        android:icon="@android:drawable/ic_menu_delete"
+        android:title="Delete"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_share_msg"
+        android:icon="@android:drawable/ic_menu_share"
+        android:title="Share"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_pin_msg"
+        android:icon="@drawable/ic_pin"
+        android:title="Pin"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_verify_security_code"
+        android:title="Verify security code"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_overflow_share"
+        android:title="Share"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_report_msg"
+        android:title="Report"
+        app:showAsAction="never" />
+
+</menu>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ChatApp_teal">#075E54</color>
+    <color name="ChatApp_teal_dark">#054D44</color>
+    <color name="whatsapp_action_mode">#005C4B</color>
+    <color name="ChatApp_light_green">#25D366</color>
+    <color name="ChatApp_status_green">#00E676</color>
+    <color name="chat_background">#E5DDD5</color>
+    <color name="message_sent_bubble">#E2FFC7</color>
+    <color name="message_received_bubble">#FFFFFF</color>
+    <color name="message_input_grey">#999999</color>
+    <color name="recording_red">#FF0000</color>
+
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="grey_ticks">#8696A0</color>
+    <color name="purple_200">#075E54</color>
+    <color name="purple_500">#075E54</color>
+    <color name="purple_700">#054D44</color>
+    <color name="teal_200">#25D366</color>
+    <color name="teal_700">#075E54</color>
+</resources>
