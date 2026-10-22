@@ -117,8 +117,10 @@ async function sendOtpDelivery(target, type, code) {
       console.log(`[DEV OTP LOG] Target: ${target} | Code: ${code}`);
     }
   } else {
-    // Phone OTP: Zero-cost instant dispatch
-    console.log(`[PHONE OTP DISPATCH] Target Phone: ${target} | Code: ${code}`);
+    // Phone OTP: Prominent console log for easy testing without paid SMS gateway
+    console.log(`=======================================================`);
+    console.log(` 📱 [PHONE OTP] Target: ${target} | CODE: ${code}`);
+    console.log(`=======================================================`);
   }
 }
 
@@ -154,7 +156,7 @@ function storeAndDispatchOtp(target, type) {
     target: normalizedTarget,
     type,
     message: `Verification code sent to ${normalizedTarget}`,
-    debugOtp: process.env.NODE_ENV !== 'production' ? code : undefined
+    debugOtp: code
   };
 }
 
