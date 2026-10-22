@@ -270,4 +270,17 @@ server.listen(PORT, () => {
   console.log(`=======================================================`);
   console.log(` ChatApp OTP Socket.io Server running on port ${PORT}`);
   console.log(`=======================================================`);
+
+  // Keep-alive self-ping every 14 minutes to prevent Render free tier from spinning down
+  const PING_INTERVAL_MS = 14 * 60 * 1000;
+  setInterval(() => {
+    const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}/health`;
+    const client = selfUrl.startsWith('https') ? require('https') : require('http');
+
+    client.get(selfUrl, (res) => {
+      console.log(`[KEEP-ALIVE] Self-ping status: ${res.statusCode}`);
+    }).on('error', (err) => {
+      console.warn('[KEEP-ALIVE] Self-ping error:', err.message);
+    });
+  }, PING_INTERVAL_MS);
 });
