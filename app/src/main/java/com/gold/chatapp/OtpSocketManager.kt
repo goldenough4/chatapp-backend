@@ -9,7 +9,7 @@ import org.json.JSONObject
 
 object OtpSocketManager {
 
-    private const val PRODUCTION_SERVER_URL = "https://chatapp-otp-server.onrender.com"
+    private const val PRODUCTION_SERVER_URL = "https://chatapp-backend-dwh6.onrender.com"
 
     private var socket: Socket? = null
     private val mainHandler = Handler(Looper.getMainLooper())

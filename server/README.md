@@ -31,7 +31,7 @@ Once your backend is live on Render or Railway:
 1. Open **[OtpSocketManager.kt](file:///home/goldenough8/AndroidStudioProjects/ChatApp/app/src/main/java/com/gold/chatapp/OtpSocketManager.kt)**.
 2. Update `PRODUCTION_SERVER_URL` with your live HTTPS URL:
    ```kotlin
-   private const val PRODUCTION_SERVER_URL = "https://your-live-server.onrender.com"
+   private const val PRODUCTION_SERVER_URL = "https://chatapp-backend-dwh6.onrender.com"
    ```
 3. Rebuild and run the app. Your chat application will now communicate securely over HTTPS/WSS worldwide on any Wi-Fi or cellular network!
 
