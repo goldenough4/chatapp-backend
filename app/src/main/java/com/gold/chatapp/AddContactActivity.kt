@@ -28,6 +28,7 @@ class AddContactActivity : AppCompatActivity() {
         val lastNameInput = findViewById<TextInputEditText>(R.id.input_last_name)
         val usernameInput = findViewById<TextInputEditText>(R.id.input_username)
         val phoneInput = findViewById<TextInputEditText>(R.id.input_phone)
+        val emailInput = findViewById<TextInputEditText>(R.id.input_email)
         val countryCodeInput = findViewById<TextInputEditText>(R.id.input_country_code)
         val syncSwitch = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switch_sync)
         val saveButton = findViewById<MaterialButton>(R.id.btn_save)
@@ -37,53 +38,56 @@ class AddContactActivity : AppCompatActivity() {
             val lastName = lastNameInput.text?.toString()?.trim() ?: ""
             val username = usernameInput.text?.toString()?.trim() ?: ""
             val rawPhone = phoneInput.text?.toString()?.trim() ?: ""
+            val email = emailInput.text?.toString()?.trim() ?: ""
             val countryCode = countryCodeInput.text?.toString()?.trim() ?: ""
-            val isSyncEnabled = syncSwitch.isChecked
 
-            if (firstName.isEmpty() || rawPhone.isEmpty()) {
-                Toast.makeText(this, "First name and phone are required", Toast.LENGTH_SHORT).show()
+            if (firstName.isEmpty() || (rawPhone.isEmpty() && email.isEmpty())) {
+                Toast.makeText(this, "First name and either phone or email are required", Toast.LENGTH_SHORT).show()
             } else {
                 val fullName = if (lastName.isEmpty()) firstName else "$firstName $lastName"
-                val fullPhone = if (rawPhone.startsWith("+")) rawPhone else "$countryCode$rawPhone"
-                val cleanPhone = fullPhone.replace(Regex("[\\s\\-()]"), "")
+                val identifier = if (email.isNotEmpty()) {
+                    email.lowercase()
+                } else {
+                    val fullPhone = if (rawPhone.startsWith("+")) rawPhone else "$countryCode$rawPhone"
+                    fullPhone.replace(Regex("[\\s\\-()]"), "")
+                }
                 
-                // Note: Username and sync preference can be handled here if needed in future schema updates
-                searchAndSaveContact(fullName, cleanPhone)
+                searchAndSaveContact(fullName, identifier)
             }
         }
     }
 
-    private fun searchAndSaveContact(name: String, cleanPhone: String) {
-        // Search the global "users" collection for this cleaned phone number
+    private fun searchAndSaveContact(name: String, identifier: String) {
+        // Search the global "users" collection for this phone number or email
         db.collection("users")
-            .document(cleanPhone)
+            .document(identifier)
             .get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
-                    saveToPrefs(name, cleanPhone)
+                    saveToPrefs(name, identifier)
                 } else {
                     // Still save it so the user can attempt to message them
                     Toast.makeText(this, "User not registered, but added", Toast.LENGTH_SHORT)
                         .show()
-                    saveToPrefs(name, cleanPhone)
+                    saveToPrefs(name, identifier)
                 }
             }
             .addOnFailureListener { e ->
                 Log.e("ADD_CONTACT", "Error: ${e.message}")
-                saveToPrefs(name, cleanPhone)
+                saveToPrefs(name, identifier)
             }
     }
 
-    private fun saveToPrefs(name: String, phoneToUse: String) {
+    private fun saveToPrefs(name: String, identifierToUse: String) {
         val prefs = getSharedPreferences("contacts_prefs", MODE_PRIVATE)
         val currentContacts =
             prefs.getStringSet("contacts", emptySet())?.toMutableSet() ?: mutableSetOf()
 
         // 1. Add to the Set for the main list
-        currentContacts.add("$name|$phoneToUse")
+        currentContacts.add("$name|$identifierToUse")
         prefs.edit { putStringSet("contacts", currentContacts) }
 
-        // 2. Update the contacts_map (used for looking up names from phone numbers)
+        // 2. Update the contacts_map (used for looking up names from identifiers)
         val mapString = prefs.getString("contacts_map", "") ?: ""
         val contactMap = mutableMapOf<String, String>()
 
@@ -94,7 +98,7 @@ class AddContactActivity : AppCompatActivity() {
             }
         }
 
-        contactMap[phoneToUse] = name
+        contactMap[identifierToUse] = name
 
         val newMapString = contactMap.entries.asSequence()
             .filter { it.key.isNotEmpty() }

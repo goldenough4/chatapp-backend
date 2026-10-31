@@ -86,19 +86,18 @@ async function sendOtpDelivery(target, type, code) {
 
   if (isEmail) {
     const mailOptions = {
-      from: process.env.SMTP_FROM || '"ChatApp Verification" <noreply@chatapp.com>',
+      from: process.env.SMTP_FROM || '"chattapp" <noreply@chattapp.com>',
       to: target,
-      subject: 'Your Verification Code - ChatApp',
-      text: `Your ChatApp verification code is: ${code}. Valid for 5 minutes.`,
+      subject: 'Verification Code - chattapp',
+      text: `chattapp your verification code is ${code}`,
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 10px;">
-          <h2 style="color: #6200EE; text-align: center;">ChatApp Verification</h2>
-          <p>Hello,</p>
-          <p>Your 6-digit verification code is:</p>
-          <div style="background-color: #f3e5f5; padding: 15px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 5px; color: #6200EE; border-radius: 8px;">
+        <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+          <h1 style="color: #075E54; text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 20px;">chattapp</h1>
+          <p style="font-size: 16px; color: #333333; text-align: center; margin-bottom: 15px;">your verification code is</p>
+          <div style="background-color: #f0f2f5; padding: 18px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54; border-radius: 8px; margin-bottom: 20px;">
             ${code}
           </div>
-          <p style="margin-top: 20px; color: #666; font-size: 13px;">This code will expire in 5 minutes.</p>
+          <p style="text-align: center; color: #666666; font-size: 13px;">This code will expire in 5 minutes.</p>
         </div>
       `
     };

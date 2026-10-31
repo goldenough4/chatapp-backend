@@ -15,7 +15,6 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -34,6 +33,7 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var aboutEdit: EditText
     private lateinit var usernameEdit: EditText
     private lateinit var phoneDisplay: EditText
+    private lateinit var emailDisplay: EditText
     private lateinit var linksEdit: EditText
 
     private lateinit var changePhotoButton: FloatingActionButton
@@ -78,16 +78,23 @@ class ProfileActivity : AppCompatActivity() {
         aboutEdit = findViewById(R.id.profile_about_edit)
         usernameEdit = findViewById(R.id.profile_username_edit)
         phoneDisplay = findViewById(R.id.profile_phone_display)
+        emailDisplay = findViewById(R.id.profile_email_display)
         linksEdit = findViewById(R.id.profile_links_edit)
         changePhotoButton = findViewById(R.id.btn_change_photo)
 
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
-        val myPhone = prefs.getString("user_phone", "") ?: ""
-        phoneDisplay.setText(myPhone)
+        val myIdentifier = prefs.getString("user_phone", "") ?: ""
+        if (myIdentifier.contains("@")) {
+            emailDisplay.setText(myIdentifier)
+            phoneDisplay.setText("")
+        } else {
+            phoneDisplay.setText(myIdentifier)
+            emailDisplay.setText("")
+        }
 
         changePhotoButton.setOnClickListener { pickImageLauncher.launch("image/*") }
 
-        loadExistingProfile(myPhone)
+        loadExistingProfile(myIdentifier)
     }
 
     override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
@@ -103,16 +110,22 @@ class ProfileActivity : AppCompatActivity() {
         return super.onOptionsItemSelected(item)
     }
 
-    private fun loadExistingProfile(phone: String) {
+    private fun loadExistingProfile(identifier: String) {
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
         val b2Token = prefs.getString("b2_auth_token", "") ?: ""
 
-        db.collection("users").document(phone).get().addOnSuccessListener { sn ->
+        db.collection("users").document(identifier).get().addOnSuccessListener { sn ->
             if (sn != null && sn.exists()) {
                 nameEdit.setText(sn.getString("name") ?: "")
                 aboutEdit.setText(sn.getString("about") ?: "")
                 usernameEdit.setText(sn.getString("username") ?: "")
                 linksEdit.setText(sn.getString("links") ?: "")
+
+                val phoneVal = sn.getString("phone") ?: if (!identifier.contains("@")) identifier else ""
+                val emailVal = sn.getString("email") ?: if (identifier.contains("@")) identifier else ""
+
+                if (phoneVal.isNotEmpty()) phoneDisplay.setText(phoneVal)
+                if (emailVal.isNotEmpty()) emailDisplay.setText(emailVal)
 
                 val avatar = sn.getString("profileImageUrl") ?: ""
                 if (avatar.isNotEmpty()) {
@@ -128,7 +141,7 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun saveProfile() {
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
-        val myPhone = prefs.getString("user_phone", "") ?: ""
+        val myIdentifier = prefs.getString("user_phone", "") ?: ""
         val name = nameEdit.text.toString().trim()
         val about = aboutEdit.text.toString().trim()
         val username = usernameEdit.text.toString().trim()
@@ -142,10 +155,22 @@ class ProfileActivity : AppCompatActivity() {
         @Suppress("DEPRECATION")
         val pd = ProgressDialog(this).apply { setMessage("Syncing profile..."); setCancelable(false); show() }
 
+        val updates = mutableMapOf<String, Any>(
+            "name" to name,
+            "about" to about,
+            "username" to username,
+            "links" to links
+        )
+        if (myIdentifier.contains("@")) {
+            updates["email"] = myIdentifier
+        } else {
+            updates["phone"] = myIdentifier
+        }
+
         if (selectedImageUri != null) {
-            uploadImageToB2(myPhone) { url ->
-                val updates = mapOf("name" to name, "about" to about, "username" to username, "links" to links, "profileImageUrl" to url)
-                db.collection("users").document(myPhone).set(updates, SetOptions.merge()).addOnSuccessListener {
+            uploadImageToB2(myIdentifier) { url ->
+                updates["profileImageUrl"] = url
+                db.collection("users").document(myIdentifier).set(updates, SetOptions.merge()).addOnSuccessListener {
                     pd.dismiss()
                     prefs.edit().putString("profileImageUrl", url).putString("user_name", name).apply()
                     Toast.makeText(this, "Profile Synced", Toast.LENGTH_SHORT).show()
@@ -153,8 +178,7 @@ class ProfileActivity : AppCompatActivity() {
                 }.addOnFailureListener { pd.dismiss(); Toast.makeText(this, "Sync Failed", Toast.LENGTH_SHORT).show() }
             }
         } else {
-            val updates = mapOf("name" to name, "about" to about, "username" to username, "links" to links)
-            db.collection("users").document(myPhone).set(updates, SetOptions.merge()).addOnSuccessListener {
+            db.collection("users").document(myIdentifier).set(updates, SetOptions.merge()).addOnSuccessListener {
                 pd.dismiss()
                 prefs.edit().putString("user_name", name).apply()
                 Toast.makeText(this, "Profile Synced", Toast.LENGTH_SHORT).show()
@@ -163,8 +187,8 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
-    private fun uploadImageToB2(phone: String, onUrlReady: (String) -> Unit) {
-        val fileName = "profile_${phone.replace("+", "")}.jpg"
+    private fun uploadImageToB2(identifier: String, onUrlReady: (String) -> Unit) {
+        val fileName = "profile_${identifier.replace("+", "").replace("@", "_at_")}.jpg"
         val auth = Base64.encodeToString("$b2KeyId:$b2AppKey".toByteArray(), Base64.NO_WRAP)
         
         val authReq = Request.Builder().url("https://api.backblazeb2.com/b2api/v2/b2_authorize_account").addHeader("Authorization", "Basic $auth").build()

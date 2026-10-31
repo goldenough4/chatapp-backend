@@ -83,7 +83,8 @@ class ContactInfoActivity : AppCompatActivity() {
         } else {
             nameText.text = contactName
         }
-        phoneText.text = contactId
+        val initialDisplay = if (contactId.contains("@")) contactId else contactId
+        phoneText.text = initialDisplay
 
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
         val b2Token = prefs.getString("b2_auth_token", "") ?: ""
@@ -94,6 +95,10 @@ class ContactInfoActivity : AppCompatActivity() {
                 val serverName = sn.getString("name") ?: contactName
                 val avatar = sn.getString("profileImageUrl") ?: contactImage
                 val bio = sn.getString("about") ?: "Hey there! I am using Chat Circle."
+                val phoneVal = sn.getString("phone") ?: ""
+                val emailVal = sn.getString("email") ?: ""
+                val displayVal = if (emailVal.isNotEmpty()) emailVal else if (phoneVal.isNotEmpty()) phoneVal else contactId
+                phoneText.text = displayVal
 
                 val freshLocalName = getLocalContactName(contactId)
                 if (freshLocalName != contactId && freshLocalName.isNotEmpty()) {
