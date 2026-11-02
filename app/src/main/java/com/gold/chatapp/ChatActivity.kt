@@ -347,8 +347,11 @@ class ChatActivity : AppCompatActivity() {
 
     private fun initChatDetails() {
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
-        myId = prefs.getString("user_phone", "") ?: ""
-        otherUserPhone = intent.getStringExtra("other_phone") ?: ""
+        val rawMyId = prefs.getString("user_phone", "") ?: ""
+        myId = if (rawMyId.contains("@")) rawMyId.trim().lowercase() else rawMyId.trim()
+
+        val rawOther = intent.getStringExtra("other_phone") ?: ""
+        otherUserPhone = if (rawOther.contains("@")) rawOther.trim().lowercase() else rawOther.trim()
         chatNameHeader = findViewById(R.id.chat_name)
         refreshChatHeader()
 

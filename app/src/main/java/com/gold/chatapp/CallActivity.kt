@@ -177,9 +177,11 @@ class CallActivity : AppCompatActivity() {
         setContentView(R.layout.activity_call)
 
         val prefs = getSharedPreferences("chat_app_prefs", Context.MODE_PRIVATE)
-        myPhone = prefs.getString("user_phone", "") ?: ""
+        val rawMyPhone = prefs.getString("user_phone", "") ?: ""
+        myPhone = if (rawMyPhone.contains("@")) rawMyPhone.trim().lowercase() else rawMyPhone.trim()
 
-        otherPhone = intent.getStringExtra("other_phone") ?: ""
+        val rawOtherPhone = intent.getStringExtra("other_phone") ?: ""
+        otherPhone = if (rawOtherPhone.contains("@")) rawOtherPhone.trim().lowercase() else rawOtherPhone.trim()
         contactName = intent.getStringExtra("contact_name") ?: otherPhone
         callType = intent.getStringExtra("call_type") ?: "voice"
         isIncoming = intent.getBooleanExtra("is_incoming", false)

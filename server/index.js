@@ -31,35 +31,23 @@ const otpStore = new Map();
 let transporter = null;
 
 function initTransporter() {
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const host = process.env.SMTP_HOST || (process.env.SMTP_USER.endsWith('@gmail.com') ? 'smtp.gmail.com' : 'smtp.ethereal.email');
+    const port = parseInt(process.env.SMTP_PORT || (host === 'smtp.gmail.com' ? '587' : '587'));
+    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
+      host: host,
+      port: port,
+      secure: secure,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
       }
     });
-    console.log('[MAIL] Configured production SMTP transporter');
+    console.log(`[MAIL] Configured SMTP transporter with host: ${host}, port: ${port}`);
   } else {
-    // Zero-config Ethereal test account for development
-    nodemailer.createTestAccount((err, account) => {
-      if (err) {
-        console.warn('[MAIL] Test account fallback:', err.message);
-        return;
-      }
-      transporter = nodemailer.createTransport({
-        host: account.smtp.host,
-        port: account.smtp.port,
-        secure: account.smtp.secure,
-        auth: {
-          user: account.user,
-          pass: account.pass
-        }
-      });
-      console.log('[MAIL] Initialized dev test email account:', account.user);
-    });
+    console.warn('[MAIL WARNING] SMTP environment variables (SMTP_USER, SMTP_PASS) not set. Verification codes will be printed to server logs.');
   }
 }
 
@@ -86,14 +74,14 @@ async function sendOtpDelivery(target, type, code) {
 
   if (isEmail) {
     const mailOptions = {
-      from: process.env.SMTP_FROM || '"chattapp" <noreply@chattapp.com>',
+      from: process.env.SMTP_FROM || '"ChatApp" <noreply@chatapp.com>',
       to: target,
-      subject: 'Verification Code - chattapp',
-      text: `chattapp your verification code is ${code}`,
+      subject: 'ChatApp',
+      text: `ChatApp your code is ${code}`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
-          <h1 style="color: #075E54; text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 20px;">chattapp</h1>
-          <p style="font-size: 16px; color: #333333; text-align: center; margin-bottom: 15px;">your verification code is</p>
+          <h1 style="color: #075E54; text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
+          <p style="font-size: 16px; color: #333333; text-align: center; margin-bottom: 15px;">your code is</p>
           <div style="background-color: #f0f2f5; padding: 18px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54; border-radius: 8px; margin-bottom: 20px;">
             ${code}
           </div>
@@ -106,14 +94,16 @@ async function sendOtpDelivery(target, type, code) {
       try {
         const info = await transporter.sendMail(mailOptions);
         console.log(`[MAIL SUCCESS] Sent OTP to ${target}. ID: ${info.messageId}`);
-        if (nodemailer.getTestMessageUrl(info)) {
-          console.log(`[MAIL PREVIEW URL] ${nodemailer.getTestMessageUrl(info)}`);
-        }
       } catch (err) {
         console.error(`[MAIL ERROR] Failed to send email to ${target}:`, err.message);
+        console.log(`=======================================================`);
+        console.log(` 📧 [EMAIL OTP FALLBACK] Target: ${target} | CODE: ${code}`);
+        console.log(`=======================================================`);
       }
     } else {
-      console.log(`[DEV OTP LOG] Target: ${target} | Code: ${code}`);
+      console.log(`=======================================================`);
+      console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
+      console.log(`=======================================================`);
     }
   } else {
     // Phone OTP: Prominent console log for easy testing without paid SMS gateway
@@ -154,8 +144,7 @@ function storeAndDispatchOtp(target, type) {
     success: true,
     target: normalizedTarget,
     type,
-    message: `Verification code sent to ${normalizedTarget}`,
-    debugOtp: code
+    message: `Verification code sent to ${normalizedTarget}`
   };
 }
 

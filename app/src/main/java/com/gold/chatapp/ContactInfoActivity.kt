@@ -30,7 +30,8 @@ class ContactInfoActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_contact_info)
 
-        contactId = intent.getStringExtra("other_phone") ?: ""
+        val rawContactId = intent.getStringExtra("other_phone") ?: ""
+        contactId = if (rawContactId.contains("@")) rawContactId.trim().lowercase() else rawContactId.trim()
         contactName = intent.getStringExtra("contact_name") ?: "Contact"
         contactImage = intent.getStringExtra("contact_image") ?: ""
 

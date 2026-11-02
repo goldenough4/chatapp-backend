@@ -16,7 +16,6 @@ class OtpVerificationActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_TARGET: String = "EXTRA_TARGET"
         const val EXTRA_TYPE: String = "EXTRA_TYPE"
-        const val EXTRA_DEBUG_OTP: String = "EXTRA_DEBUG_OTP"
     }
 
     private lateinit var btnBack: ImageButton
@@ -25,7 +24,6 @@ class OtpVerificationActivity : AppCompatActivity() {
     private lateinit var btnVerifyOtp: MaterialButton
     private lateinit var tvResendCode: TextView
     private lateinit var progressBar: ProgressBar
-    private lateinit var tvDebugOtp: TextView
 
     private var target: String = ""
     private var targetType: String = "email"
@@ -39,7 +37,6 @@ class OtpVerificationActivity : AppCompatActivity() {
         target = intent.getStringExtra(EXTRA_TARGET) ?: ""
         val typeExtra = intent.getStringExtra(EXTRA_TYPE)
         targetType = typeExtra ?: if (target.contains("@")) "email" else "phone"
-        val debugOtp = intent.getStringExtra(EXTRA_DEBUG_OTP)
 
         btnBack = findViewById(R.id.btn_back)
         tvTarget = findViewById(R.id.tv_target)
@@ -47,16 +44,8 @@ class OtpVerificationActivity : AppCompatActivity() {
         btnVerifyOtp = findViewById(R.id.btn_verify_otp)
         tvResendCode = findViewById(R.id.tv_resend_code)
         progressBar = findViewById(R.id.progress_bar)
-        tvDebugOtp = findViewById(R.id.tv_debug_otp)
 
         tvTarget.text = target
-
-        if (!debugOtp.isNullOrEmpty()) {
-            tvDebugOtp.text = getString(R.string.dev_otp_format, debugOtp)
-            tvDebugOtp.visibility = View.VISIBLE
-        } else {
-            tvDebugOtp.visibility = View.GONE
-        }
 
         btnBack.setOnClickListener {
             finish()
@@ -101,15 +90,11 @@ class OtpVerificationActivity : AppCompatActivity() {
         setLoadingState(isLoading = true)
         canResend = false
 
-        OtpSocketManager.resendOtp(this, target, targetType) { success, message, newDebugOtp ->
+        OtpSocketManager.resendOtp(this, target, targetType) { success, message, _ ->
             setLoadingState(isLoading = false)
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
             if (success) {
-                if (!newDebugOtp.isNullOrEmpty()) {
-                    tvDebugOtp.text = getString(R.string.dev_otp_format, newDebugOtp)
-                    tvDebugOtp.visibility = View.VISIBLE
-                }
                 startResendTimer()
             } else {
                 canResend = true

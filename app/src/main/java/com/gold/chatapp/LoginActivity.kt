@@ -102,13 +102,12 @@ class LoginActivity : AppCompatActivity() {
 
         continueButton.isEnabled = false
 
-        OtpSocketManager.requestOtp(this, target, targetType) { success, message, debugOtp ->
+        OtpSocketManager.requestOtp(this, target, targetType) { success, message, _ ->
             if (success) {
                 val intent = Intent(this, OtpVerificationActivity::class.java).apply {
                     putExtra(OtpVerificationActivity.EXTRA_TARGET, target)
                     putExtra(OtpVerificationActivity.EXTRA_TYPE, targetType)
-                    putExtra(OtpVerificationActivity.EXTRA_DEBUG_OTP, debugOtp)
-                }
+                            }
                 otpLauncher.launch(intent)
             } else {
                 continueButton.isEnabled = true
@@ -121,7 +120,8 @@ class LoginActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
         val phoneNumber = phoneInput.text.toString().trim()
         val email = emailInput.text.toString().trim()
-        val info = phoneNumber.ifEmpty { email }
+        val infoRaw = phoneNumber.ifEmpty { email }
+        val info = if (infoRaw.contains("@")) infoRaw.lowercase() else infoRaw
 
         // Disable button to prevent double login
         continueButton.isEnabled = false
@@ -139,9 +139,10 @@ class LoginActivity : AppCompatActivity() {
                 Log.w("LOGIN", "FCM Token fetch failed, proceeding with empty token")
             }
 
+            val isEmail = info.contains("@")
             // SetOptions.merge() prevents overwriting existing profile data
             val userMap = mutableMapOf<String, Any>(
-                "phone" to info,
+                (if (isEmail) "email" else "phone") to info,
                 "fcmToken" to token,
             )
 

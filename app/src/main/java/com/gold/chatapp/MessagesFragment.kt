@@ -316,14 +316,14 @@ class MessagesFragment : Fragment() {
         activeListeners.clear()
         
         contactsList.clear()
-        val myCleanId = myPhone.replace(Regex("[^0-9+]"), "").trim()
+        val myCleanId = if (myPhone.contains("@")) myPhone.trim().lowercase() else myPhone.replace(Regex("[^0-9+]"), "").trim()
 
         for (item in savedContacts) {
             val parts = item.split("|")
             if (parts.size >= 2) {
                 val name = parts[0].trim()
                 val phoneRaw = parts[1].trim()
-                val cleanPhone = phoneRaw.replace(Regex("[^0-9+]"), "").trim()
+                val cleanPhone = if (phoneRaw.contains("@")) phoneRaw.trim().lowercase() else phoneRaw.replace(Regex("[^0-9+]"), "").trim()
 
                 if (cleanPhone.isNotEmpty() && (cleanPhone != myCleanId)) {
                     val chatItem = ChatItem(
