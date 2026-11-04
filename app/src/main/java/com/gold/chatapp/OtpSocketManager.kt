@@ -75,7 +75,7 @@ object OtpSocketManager {
 
             socket?.emit("request_otp", data)
 
-            // 10-second timeout safeguard
+            // 45-second timeout safeguard for Render cold start
             mainHandler.postDelayed({
                 if (!responded) {
                     responded = true
@@ -83,7 +83,7 @@ object OtpSocketManager {
                         callback(false, "Server request timed out. Please try again.", null)
                     }
                 }
-            }, 10000)
+            }, 45000)
         }
     }
 
@@ -130,7 +130,7 @@ object OtpSocketManager {
 
             socket?.emit("verify_otp", data)
 
-            // 10-second timeout safeguard
+            // 45-second timeout safeguard for Render cold start
             mainHandler.postDelayed({
                 if (!responded) {
                     responded = true
@@ -138,7 +138,7 @@ object OtpSocketManager {
                         callback(false, "Verification request timed out. Please try again.")
                     }
                 }
-            }, 10000)
+            }, 45000)
         }
     }
 
@@ -165,9 +165,9 @@ object OtpSocketManager {
                 transports = arrayOf("websocket", "polling")
                 secure = true
                 reconnection = true
-                reconnectionAttempts = 3
+                reconnectionAttempts = 5
                 reconnectionDelay = 1000
-                timeout = 8000
+                timeout = 60000
             }
 
             val candidateSocket = IO.socket(PRODUCTION_SERVER_URL, options)
@@ -184,7 +184,7 @@ object OtpSocketManager {
                 }
             }
 
-            mainHandler.postDelayed(timeoutRunnable, 9000)
+            mainHandler.postDelayed(timeoutRunnable, 65000)
 
             candidateSocket.on(Socket.EVENT_CONNECT) {
                 if (!resolved) {
