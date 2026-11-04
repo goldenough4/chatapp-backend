@@ -33,7 +33,7 @@ let transporter = null;
 function initTransporter() {
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
     const host = process.env.SMTP_HOST || (process.env.SMTP_USER.endsWith('@gmail.com') ? 'smtp.gmail.com' : 'smtp.ethereal.email');
-    const port = parseInt(process.env.SMTP_PORT || (host === 'smtp.gmail.com' ? '587' : '587'));
+    const port = parseInt(process.env.SMTP_PORT || (host === 'smtp.gmail.com' ? '465' : '587'));
     const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
     transporter = nodemailer.createTransport({
@@ -43,9 +43,12 @@ function initTransporter() {
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
       }
     });
-    console.log(`[MAIL] Configured SMTP transporter with host: ${host}, port: ${port}`);
+    console.log(`[MAIL] Configured SMTP transporter with host: ${host}, port: ${port}, secure: ${secure}`);
   } else {
     console.warn('[MAIL WARNING] SMTP environment variables (SMTP_USER, SMTP_PASS) not set. Verification codes will be printed to server logs.');
   }
@@ -74,7 +77,7 @@ async function sendOtpDelivery(target, type, code) {
 
   if (isEmail) {
     const mailOptions = {
-      from: process.env.SMTP_FROM || '"ChatApp" <noreply@chatapp.com>',
+      from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
       to: target,
       subject: 'ChatApp',
       text: `ChatApp your code is ${code}`,
