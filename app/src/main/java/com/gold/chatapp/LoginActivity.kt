@@ -80,7 +80,13 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        // CHECK IF WE NEED TO ASK FOR NOTIFICATION PERMISSION (Android 13+)
+        // If phone number is entered, bypass verification screen and route directly to profile setup
+        if (phoneNumber.isNotEmpty()) {
+            performLogin()
+            return
+        }
+
+        // Otherwise (email login), proceed with notification permission check and email verification
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 == PackageManager.PERMISSION_GRANTED
@@ -107,7 +113,7 @@ class LoginActivity : AppCompatActivity() {
                 val intent = Intent(this, OtpVerificationActivity::class.java).apply {
                     putExtra(OtpVerificationActivity.EXTRA_TARGET, target)
                     putExtra(OtpVerificationActivity.EXTRA_TYPE, targetType)
-                            }
+                }
                 otpLauncher.launch(intent)
             } else {
                 continueButton.isEnabled = true
