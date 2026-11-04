@@ -243,6 +243,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', server: 'ChatApp Production OTP Server', timestamp: new Date() });
 });
 
+app.get('/ping', (req, res) => {
+  res.status(200).send('pong');
+});
+
 app.post('/api/request-otp', (req, res) => {
   const { target, type } = req.body;
   if (!target) {
