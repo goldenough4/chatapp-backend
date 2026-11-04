@@ -267,12 +267,12 @@ server.listen(PORT, () => {
   console.log(`=======================================================`);
 
   // Keep-alive self-ping every 14 minutes to prevent Render free tier from spinning down
-  const PING_INTERVAL_MS = 14 * 60 * 1000;
+  // Keep-alive self-ping every 10 minutes to prevent Render free tier from spinning down
+  const PING_INTERVAL_MS = 10 * 60 * 1000;
   setInterval(() => {
-    const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}/health`;
-    const client = selfUrl.startsWith('https') ? require('https') : require('http');
+    const selfUrl = 'https://chatapp-backend-dwhh6.onrender.com/health';
 
-    client.get(selfUrl, (res) => {
+    https.get(selfUrl, (res) => {
       console.log(`[KEEP-ALIVE] Self-ping status: ${res.statusCode}`);
     }).on('error', (err) => {
       console.warn('[KEEP-ALIVE] Self-ping error:', err.message);
