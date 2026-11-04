@@ -119,6 +119,18 @@ object OtpSocketManager {
             override fun onResponse(call: Call, response: Response) {
                 try {
                     val bodyString = response.body?.string() ?: "{}"
+                    val trimmed = bodyString.trim()
+                    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+                        Log.e(TAG, "Non-JSON response (${response.code}): $trimmed")
+                        val msg = if (response.code in 500..599) {
+                            "Server is waking up (502/503). Please wait 30s and try again."
+                        } else {
+                            "Server error (${response.code}). Please try again."
+                        }
+                        mainHandler.post { callback(false, msg, null) }
+                        return
+                    }
+
                     val jsonResponse = JSONObject(bodyString)
                     val success = jsonResponse.optBoolean("success", false)
                     val message = jsonResponse.optString("message", "Response received")
@@ -130,7 +142,7 @@ object OtpSocketManager {
                 } catch (e: Exception) {
                     Log.e(TAG, "OkHttp request_otp parse error: ${e.message}", e)
                     mainHandler.post {
-                        callback(false, "Parse error: ${e.message}", null)
+                        callback(false, "Server response parse error. Please try again.", null)
                     }
                 }
             }
@@ -178,7 +190,10 @@ object OtpSocketManager {
                     }
                 }, 45000)
             } else {
-                Log.w(TAG, "Socket connect failed. Falling back to OkHttp REST API for verify_otp.")
+                Log.w(
+                    TAG,
+                    "Socket connect failed. Falling back to OkHttp REST API for verify_otp."
+                )
                 verifyOtpViaRest(normalizedTarget, otp, callback)
             }
         }
@@ -210,6 +225,18 @@ object OtpSocketManager {
             override fun onResponse(call: Call, response: Response) {
                 try {
                     val bodyString = response.body?.string() ?: "{}"
+                    val trimmed = bodyString.trim()
+                    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+                        Log.e(TAG, "Non-JSON response (${response.code}): $trimmed")
+                        val msg = if (response.code in 500..599) {
+                            "Server is waking up (502/503). Please wait 30s and try again."
+                        } else {
+                            "Server error (${response.code}). Please try again."
+                        }
+                        mainHandler.post { callback(false, msg) }
+                        return
+                    }
+
                     val jsonResponse = JSONObject(bodyString)
                     val success = jsonResponse.optBoolean("success", false)
                     val message = jsonResponse.optString("message", "Verification failed")
@@ -220,7 +247,7 @@ object OtpSocketManager {
                 } catch (e: Exception) {
                     Log.e(TAG, "OkHttp verify_otp parse error: ${e.message}", e)
                     mainHandler.post {
-                        callback(false, "Parse error: ${e.message}")
+                        callback(false, "Server response parse error. Please try again.")
                     }
                 }
             }
