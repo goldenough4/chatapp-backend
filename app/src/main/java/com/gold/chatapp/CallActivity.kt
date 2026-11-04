@@ -253,7 +253,7 @@ class CallActivity : AppCompatActivity() {
         val callDoc = db.collection("calls").document(callId)
         callListener = callDoc.addSnapshotListener { sn, _ ->
             if (sn != null && sn.exists()) {
-                val status = sn.getString("status") ?: ""
+                val status = sn.get("status")?.toString() ?: ""
                 if (status == "ended") {
                     stopRingingAndVibration()
                     endCall()
@@ -591,7 +591,7 @@ class CallActivity : AppCompatActivity() {
             // Listen for Answer and Ringing Status
             callListener = callDoc.addSnapshotListener { sn, _ ->
                 if (sn != null && sn.exists()) {
-                    val status = sn.getString("status") ?: ""
+                    val status = sn.get("status")?.toString() ?: ""
                     if (status == "ringing") {
                         runOnUiThread { statusText.text = "Ringing..." }
                     } else if (status == "answered" || status == "connected") {
@@ -713,7 +713,7 @@ class CallActivity : AppCompatActivity() {
             // Listen for Call Termination
             callListener = callDoc.addSnapshotListener { sn, _ ->
                 if (sn != null && sn.exists()) {
-                    val status = sn.getString("status") ?: ""
+                    val status = sn.get("status")?.toString() ?: ""
                     if (status == "ended") endCall()
                 }
             }

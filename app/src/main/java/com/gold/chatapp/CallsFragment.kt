@@ -63,11 +63,11 @@ class CallsFragment : Fragment() {
                 if (snapshots != null) {
                     callsList.clear()
                     for (doc in snapshots) {
-                        val caller = doc.getString("caller") ?: ""
-                        val callee = doc.getString("callee") ?: ""
+                        val caller = doc.get("caller")?.toString() ?: ""
+                        val callee = doc.get("callee")?.toString() ?: ""
                         if (caller == myPhone || callee == myPhone) {
-                            val callType = doc.getString("callType") ?: "voice"
-                            val status = doc.getString("status") ?: "ended"
+                            val callType = doc.get("callType")?.toString() ?: "voice"
+                            val status = doc.get("status")?.toString() ?: "ended"
                             val timestampDate = parseSafeDate(doc.get("timestamp"))
 
                             callsList.add(
