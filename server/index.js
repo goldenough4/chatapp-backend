@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
@@ -71,41 +72,100 @@ setInterval(() => {
   }
 }, 60000);
 
+// Helper function to send email via HTTPS API (Port 443 - Bypasses cloud SMTP port blocking)
+async function sendEmailViaHttps(to, subject, htmlText) {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY not set');
+  }
+
+  const data = JSON.stringify({
+    from: process.env.SMTP_FROM || 'ChatApp <onboarding@resend.dev>',
+    to: [to],
+    subject: subject,
+    html: htmlText
+  });
+
+  const options = {
+    hostname: 'api.resend.com',
+    path: '/emails',
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      'Content-Length': data.length
+    }
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(JSON.parse(body));
+        } else {
+          reject(new Error(`Resend API Error (${res.statusCode}): ${body}`));
+        }
+      });
+    });
+    req.on('error', (err) => reject(err));
+    req.write(data);
+    req.end();
+  });
+}
+
 // Helper function to send OTP via Email or Phone Transport
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
   if (isEmail) {
-    const mailOptions = {
-      from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
-      to: target,
-      subject: 'ChatApp',
-      text: `ChatApp your code is ${code}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
-          <h1 style="color: #075E54; text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
-          <p style="font-size: 16px; color: #333333; text-align: center; margin-bottom: 15px;">your code is</p>
-          <div style="background-color: #f0f2f5; padding: 18px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54; border-radius: 8px; margin-bottom: 20px;">
-            ${code}
-          </div>
-          <p style="text-align: center; color: #666666; font-size: 13px;">This code will expire in 5 minutes.</p>
+    const subject = 'ChatApp';
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+        <h1 style="color: #075E54; text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
+        <p style="font-size: 16px; color: #333333; text-align: center; margin-bottom: 15px;">your code is</p>
+        <div style="background-color: #f0f2f5; padding: 18px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54; border-radius: 8px; margin-bottom: 20px;">
+          ${code}
         </div>
-      `
-    };
+        <p style="text-align: center; color: #666666; font-size: 13px;">This code will expire in 5 minutes.</p>
+      </div>
+    `;
 
-    if (transporter) {
+    let sent = false;
+
+    // 1. Try HTTPS Port 443 API (Bypasses Render/cloud SMTP port blocking)
+    if (process.env.RESEND_API_KEY) {
       try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`[MAIL SUCCESS] Sent OTP to ${target}. ID: ${info.messageId}`);
+        const result = await sendEmailViaHttps(target, subject, htmlContent);
+        console.log(`[HTTPS API SUCCESS] Sent OTP to ${target}. ID: ${result.id || 'OK'}`);
+        sent = true;
       } catch (err) {
-        console.error(`[MAIL ERROR] Failed to send email to ${target}:`, err.message);
-        console.log(`=======================================================`);
-        console.log(` 📧 [EMAIL OTP FALLBACK] Target: ${target} | CODE: ${code}`);
-        console.log(`=======================================================`);
+        console.warn(`[HTTPS API WARNING] Failed to send via HTTPS API: ${err.message}. Trying SMTP...`);
       }
-    } else {
+    }
+
+    // 2. Try SMTP if HTTPS API was not used or failed
+    if (!sent && transporter) {
+      try {
+        const mailOptions = {
+          from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
+          to: target,
+          subject: subject,
+          text: `ChatApp your code is ${code}`,
+          html: htmlContent
+        };
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[SMTP SUCCESS] Sent OTP to ${target}. ID: ${info.messageId}`);
+        sent = true;
+      } catch (err) {
+        console.error(`[SMTP ERROR] Failed to send email via SMTP to ${target}:`, err.message);
+      }
+    }
+
+    // 3. Fallback console log
+    if (!sent) {
       console.log(`=======================================================`);
-      console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
+      console.log(` 📧 [EMAIL OTP FALLBACK] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
     }
   } else {
