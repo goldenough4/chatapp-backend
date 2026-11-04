@@ -6,6 +6,9 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
+app.get('/ping', (req, res) => {
+  res.status(200).send('pong');
+});
 app.set('trust proxy', 1); // Trust reverse proxies (Render, Railway, Cloudflare, Heroku)
 app.use(cors());
 app.use(express.json());
@@ -241,10 +244,6 @@ io.on('connection', (socket) => {
 // HTTP Fallback Endpoints
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', server: 'ChatApp Production OTP Server', timestamp: new Date() });
-});
-
-app.get('/ping', (req, res) => {
-  res.status(200).send('pong');
 });
 
 app.post('/api/request-otp', (req, res) => {
