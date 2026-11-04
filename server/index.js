@@ -1,6 +1,5 @@
 const express = require('express');
 const http = require('http');
-const https = require('https');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
@@ -28,30 +27,29 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Nodemailer)
+// Transporter setup (Standard Gmail SMTP)
 let transporter = null;
 
 function initTransporter() {
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    const host = process.env.SMTP_HOST || (process.env.SMTP_USER.endsWith('@gmail.com') ? 'smtp.gmail.com' : 'smtp.ethereal.email');
-    const port = parseInt(process.env.SMTP_PORT || (host === 'smtp.gmail.com' ? '465' : '587'));
-    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+    const user = process.env.SMTP_USER.trim();
+    const pass = process.env.SMTP_PASS.trim();
 
     transporter = nodemailer.createTransport({
-      host: host,
-      port: port,
-      secure: secure,
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // SSL port 465 is extremely reliable
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
+        user: user,
+        pass: pass
       },
       tls: {
         rejectUnauthorized: false
       }
     });
-    console.log(`[MAIL] Configured SMTP transporter with host: ${host}, port: ${port}, secure: ${secure}`);
+    console.log(`[MAIL] Initialized Gmail SMTP transporter for: ${user}`);
   } else {
-    console.warn('[MAIL WARNING] SMTP environment variables (SMTP_USER, SMTP_PASS) not set. Verification codes will be printed to server logs.');
+    console.warn('[MAIL WARNING] SMTP_USER and SMTP_PASS environment variables are not set.');
   }
 }
 
@@ -72,49 +70,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send email via HTTPS API (Port 443 - Bypasses cloud SMTP port blocking)
-async function sendEmailViaHttps(to, subject, htmlText) {
-  if (!process.env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY not set');
-  }
-
-  const data = JSON.stringify({
-    from: process.env.SMTP_FROM || 'ChatApp <onboarding@resend.dev>',
-    to: [to],
-    subject: subject,
-    html: htmlText
-  });
-
-  const options = {
-    hostname: 'api.resend.com',
-    path: '/emails',
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-      'Content-Length': data.length
-    }
-  };
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => body += chunk);
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(JSON.parse(body));
-        } else {
-          reject(new Error(`Resend API Error (${res.statusCode}): ${body}`));
-        }
-      });
-    });
-    req.on('error', (err) => reject(err));
-    req.write(data);
-    req.end();
-  });
-}
-
-// Helper function to send OTP via Email or Phone Transport
+// Helper function to send OTP via SMTP
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -131,21 +87,7 @@ async function sendOtpDelivery(target, type, code) {
       </div>
     `;
 
-    let sent = false;
-
-    // 1. Try HTTPS Port 443 API (Bypasses Render/cloud SMTP port blocking)
-    if (process.env.RESEND_API_KEY) {
-      try {
-        const result = await sendEmailViaHttps(target, subject, htmlContent);
-        console.log(`[HTTPS API SUCCESS] Sent OTP to ${target}. ID: ${result.id || 'OK'}`);
-        sent = true;
-      } catch (err) {
-        console.warn(`[HTTPS API WARNING] Failed to send via HTTPS API: ${err.message}. Trying SMTP...`);
-      }
-    }
-
-    // 2. Try SMTP if HTTPS API was not used or failed
-    if (!sent && transporter) {
+    if (transporter) {
       try {
         const mailOptions = {
           from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
@@ -155,21 +97,21 @@ async function sendOtpDelivery(target, type, code) {
           html: htmlContent
         };
         const info = await transporter.sendMail(mailOptions);
-        console.log(`[SMTP SUCCESS] Sent OTP to ${target}. ID: ${info.messageId}`);
-        sent = true;
+        console.log(`[SMTP SUCCESS] Sent verification email to ${target}. Message ID: ${info.messageId}`);
       } catch (err) {
-        console.error(`[SMTP ERROR] Failed to send email via SMTP to ${target}:`, err.message);
+        console.error(`[SMTP ERROR] Failed to send email to ${target}:`, err.message);
+        console.log(`=======================================================`);
+        console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
+        console.log(`=======================================================`);
       }
-    }
-
-    // 3. Fallback console log
-    if (!sent) {
+    } else {
+      console.warn(`[MAIL WARNING] Transporter unconfigured. Printing email OTP to console.`);
       console.log(`=======================================================`);
-      console.log(` 📧 [EMAIL OTP FALLBACK] Target: ${target} | CODE: ${code}`);
+      console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
     }
   } else {
-    // Phone OTP: Prominent console log for easy testing without paid SMS gateway
+    // Phone OTP
     console.log(`=======================================================`);
     console.log(` 📱 [PHONE OTP] Target: ${target} | CODE: ${code}`);
     console.log(`=======================================================`);
