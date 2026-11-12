@@ -110,7 +110,10 @@ class OtpVerificationActivity : AppCompatActivity() {
         countDownTimer = object : CountDownTimer(60000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 val seconds = millisUntilFinished / 1000
-                tvResendCode.text = getString(R.string.resend_timer_format, seconds)
+                val text = getString(R.string.resend_timer_format, seconds)
+                if (tvResendCode.text.toString() != text) {
+                    tvResendCode.text = text
+                }
             }
 
             override fun onFinish() {

@@ -31,6 +31,7 @@ class MessagesFragment : Fragment() {
 
     private val activeListeners = mutableMapOf<String, ListenerRegistration>()
     private var currentB2Token: String = ""
+    private var lastLoadTime = 0L
 
     private lateinit var searchInput: EditText
     private lateinit var clearSearch: ImageView
@@ -318,6 +319,8 @@ class MessagesFragment : Fragment() {
         contactsList.clear()
         val myCleanId = if (myPhone.contains("@")) myPhone.trim().lowercase() else myPhone.replace(Regex("[^0-9+]"), "").trim()
 
+        val tempContacts = mutableListOf<ChatItem>()
+
         for (item in savedContacts) {
             val parts = item.split("|")
             if (parts.size >= 2) {
@@ -326,18 +329,29 @@ class MessagesFragment : Fragment() {
                 val cleanPhone = if (phoneRaw.contains("@")) phoneRaw.trim().lowercase() else phoneRaw.replace(Regex("[^0-9+]"), "").trim()
 
                 if (cleanPhone.isNotEmpty() && (cleanPhone != myCleanId)) {
-                    val chatItem = ChatItem(
-                        id = cleanPhone,
-                        name = name,
-                        phone = phoneRaw,
-                    )
-                    contactsList.add(chatItem)
-                    setupListenersForContact(cleanPhone, myCleanId)
+                    val existingIndex = tempContacts.indexOfFirst { it.id == cleanPhone }
+                    if (existingIndex != -1) {
+                        tempContacts[existingIndex].name = name
+                        tempContacts[existingIndex].phone = phoneRaw
+                    } else {
+                        val chatItem = ChatItem(
+                            id = cleanPhone,
+                            name = name,
+                            phone = phoneRaw,
+                        )
+                        tempContacts.add(chatItem)
+                    }
                 }
             }
         }
 
-        filter(searchInput.text.toString())
+        contactsList.addAll(tempContacts)
+        sortContactsByTime()
+
+        // Attach listeners AFTER initial list population and rendering to eliminate snapshot race conditions
+        for (chatItem in contactsList) {
+            setupListenersForContact(chatItem.id, myCleanId)
+        }
     }
 
     private fun getLocalContactName(phoneNumber: String): String {

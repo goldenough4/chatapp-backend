@@ -195,35 +195,46 @@ class ProfileActivity : AppCompatActivity() {
         client.newCall(authReq).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) { runOnUiThread { Toast.makeText(this@ProfileActivity, "Auth Fail", Toast.LENGTH_SHORT).show() } }
             override fun onResponse(call: Call, response: Response) {
+                if (!response.isSuccessful) {
+                    runOnUiThread { Toast.makeText(this@ProfileActivity, "Auth Fail: ${response.code}", Toast.LENGTH_SHORT).show() }
+                    return
+                }
                 val body = response.body?.string() ?: return
-                val authJson = JSONObject(body)
-                val apiUrl = authJson.getString("apiUrl")
-                val token = authJson.getString("authorizationToken")
-                val dlUrl = authJson.getString("downloadUrl")
+                try {
+                    val authJson = JSONObject(body)
+                    val apiUrl = authJson.optString("apiUrl")
+                    val token = authJson.optString("authorizationToken")
+                    val dlUrl = authJson.optString("downloadUrl")
+                    if (apiUrl.isEmpty() || token.isEmpty()) return
 
-                val getUrlReq = Request.Builder().url("$apiUrl/b2api/v2/b2_get_upload_url").addHeader("Authorization", token).post(JSONObject().put("bucketId", b2BucketId).toString().toRequestBody("application/json".toMediaType())).build()
-                client.newCall(getUrlReq).enqueue(object : Callback {
-                    override fun onFailure(call: Call, e: IOException) {}
-                    override fun onResponse(call: Call, response: Response) {
-                        val upBody = response.body?.string() ?: return
-                        val upJson = JSONObject(upBody)
-                        val upUrl = upJson.getString("uploadUrl")
-                        val upToken = upJson.getString("authorizationToken")
+                    val getUrlReq = Request.Builder().url("$apiUrl/b2api/v2/b2_get_upload_url").addHeader("Authorization", token).post(JSONObject().put("bucketId", b2BucketId).toString().toRequestBody("application/json".toMediaType())).build()
+                    client.newCall(getUrlReq).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {}
+                        override fun onResponse(call: Call, response: Response) {
+                            if (!response.isSuccessful) return
+                            val upBody = response.body?.string() ?: return
+                            try {
+                                val upJson = JSONObject(upBody)
+                                val upUrl = upJson.optString("uploadUrl")
+                                val upToken = upJson.optString("authorizationToken")
+                                if (upUrl.isEmpty() || upToken.isEmpty()) return
 
-                        val uri = selectedImageUri ?: return
-                        val inputStream = contentResolver.openInputStream(uri)
-                        val bytes = inputStream?.readBytes() ?: return
-                        val upReq = Request.Builder().url(upUrl).addHeader("Authorization", upToken).addHeader("X-Bz-File-Name", fileName).addHeader("Content-Type", "image/jpeg").addHeader("X-Bz-Content-Sha1", "do_not_verify").post(bytes.toRequestBody("image/jpeg".toMediaType())).build()
-                        client.newCall(upReq).enqueue(object : Callback {
-                            override fun onFailure(call: Call, e: IOException) {}
-                            override fun onResponse(call: Call, response: Response) {
-                                if (response.isSuccessful) {
-                                    runOnUiThread { onUrlReady("$dlUrl/file/$b2BucketName/$fileName") }
-                                }
-                            }
-                        })
-                    }
-                })
+                                val uri = selectedImageUri ?: return
+                                val inputStream = contentResolver.openInputStream(uri)
+                                val bytes = inputStream?.readBytes() ?: return
+                                val upReq = Request.Builder().url(upUrl).addHeader("Authorization", upToken).addHeader("X-Bz-File-Name", fileName).addHeader("Content-Type", "image/jpeg").addHeader("X-Bz-Content-Sha1", "do_not_verify").post(bytes.toRequestBody("image/jpeg".toMediaType())).build()
+                                client.newCall(upReq).enqueue(object : Callback {
+                                    override fun onFailure(call: Call, e: IOException) {}
+                                    override fun onResponse(call: Call, response: Response) {
+                                        if (response.isSuccessful) {
+                                            runOnUiThread { onUrlReady("$dlUrl/file/$b2BucketName/$fileName") }
+                                        }
+                                    }
+                                })
+                            } catch (_: Exception) {}
+                        }
+                    })
+                } catch (_: Exception) {}
             }
         })
     }

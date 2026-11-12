@@ -5,7 +5,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.firestore.FirebaseFirestore
@@ -58,43 +57,68 @@ class AddContactActivity : AppCompatActivity() {
     }
 
     private fun searchAndSaveContact(name: String, identifier: String) {
-        // Search the global "users" collection for this phone number or email
+        // Search the global "users" collection for this phone number or email by document ID or field query
         db.collection("users")
             .document(identifier)
             .get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
+                    Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
                     saveToPrefs(name, identifier)
                 } else {
-                    // Still save it so the user can attempt to message them
-                    Toast.makeText(this, "User not registered, but added", Toast.LENGTH_SHORT)
-                        .show()
-                    saveToPrefs(name, identifier)
+                    val fieldQueryField = if (identifier.contains("@")) "email" else "phone"
+                    db.collection("users")
+                        .whereEqualTo(fieldQueryField, identifier)
+                        .get()
+                        .addOnSuccessListener { querySnapshot ->
+                            if (!querySnapshot.isEmpty) {
+                                Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
+                                saveToPrefs(name, identifier)
+                            } else {
+                                Toast.makeText(this, "User not registered, but added", Toast.LENGTH_SHORT).show()
+                                saveToPrefs(name, identifier)
+                            }
+                        }
+                        .addOnFailureListener {
+                            Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
+                            saveToPrefs(name, identifier)
+                        }
                 }
             }
             .addOnFailureListener { e ->
                 Log.e("ADD_CONTACT", "Error: ${e.message}")
+                Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
                 saveToPrefs(name, identifier)
             }
     }
 
-    private fun saveToPrefs(name: String, identifierToUse: String) {
+    private fun saveToPrefs(name: String, rawIdentifier: String) {
+        val identifierToUse = rawIdentifier.trim().lowercase()
         val prefs = getSharedPreferences("contacts_prefs", MODE_PRIVATE)
         val currentContacts =
             prefs.getStringSet("contacts", emptySet())?.toMutableSet() ?: mutableSetOf()
 
-        // 1. Add to the Set for the main list
-        currentContacts.add("$name|$identifierToUse")
-        prefs.edit { putStringSet("contacts", currentContacts) }
+        // 1. Remove any old entry for this exact identifier to prevent duplicate entries or stale names
+        currentContacts.removeAll { entry ->
+            val parts = entry.split("|")
+            parts.size >= 2 && parts[1].trim().lowercase() == identifierToUse
+        }
 
-        // 2. Update the contacts_map (used for looking up names from identifiers)
+        // 2. Add the updated contact entry
+        currentContacts.add("$name|$identifierToUse")
+
+        // 3. Update the contacts_map (used for looking up names from identifiers)
         val mapString = prefs.getString("contacts_map", "") ?: ""
         val contactMap = mutableMapOf<String, String>()
 
         if (mapString.isNotEmpty()) {
             mapString.split(";").forEach { part ->
                 val p = part.split("|")
-                if (p.size == 2) contactMap[p[1]] = p[0]
+                if (p.size == 2) {
+                    val k = p[1].trim().lowercase()
+                    val v = p[0].trim()
+                    if (k.isNotEmpty()) contactMap[k] = v
+                }
             }
         }
 
@@ -104,7 +128,18 @@ class AddContactActivity : AppCompatActivity() {
             .filter { it.key.isNotEmpty() }
             .joinToString(";") { "${it.value}|${it.key}" }
 
-        prefs.edit { putString("contacts_map", newMapString) }
+        // Use a fresh HashSet copy and synchronous commit() to guarantee instant memory & disk sync
+        prefs.edit()
+            .putStringSet("contacts", HashSet(currentContacts))
+            .putString("contacts_map", newMapString)
+            .commit()
+
+        // Broadcast to update MessagesFragment & UI lists in real time
+        val broadcastIntent = android.content.Intent("com.gold.chatapp.CONTACT_UPDATED").apply {
+            putExtra("phone", identifierToUse)
+            putExtra("name", name)
+        }
+        sendBroadcast(broadcastIntent)
 
         Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
         finish()

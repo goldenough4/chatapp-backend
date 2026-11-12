@@ -244,12 +244,16 @@ class MainActivity : AppCompatActivity() {
                             callback("", "")
                             return
                         }
-                        val bodyString = it.body?.string() ?: "{}"
-                        val json = JSONObject(bodyString)
-                        callback(
-                            json.optString("authorizationToken", ""),
-                            json.optString("downloadUrl", ""),
-                        )
+                        try {
+                            val bodyString = it.body?.string() ?: "{}"
+                            val json = JSONObject(bodyString)
+                            callback(
+                                json.optString("authorizationToken", ""),
+                                json.optString("downloadUrl", ""),
+                            )
+                        } catch (_: Exception) {
+                            callback("", "")
+                        }
                     }
                 }
             },

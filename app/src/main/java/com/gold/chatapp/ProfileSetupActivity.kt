@@ -186,9 +186,17 @@ class ProfileSetupActivity : AppCompatActivity() {
 
                     try {
                         val authJson = JSONObject(authBody)
-                        val apiUrl = authJson.getString("apiUrl")
-                        val authToken = authJson.getString("authorizationToken")
-                        val downloadUrl = authJson.getString("downloadUrl")
+                        val apiUrl = authJson.optString("apiUrl")
+                        val authToken = authJson.optString("authorizationToken")
+                        val downloadUrl = authJson.optString("downloadUrl")
+
+                        if (apiUrl.isEmpty() || authToken.isEmpty()) {
+                            runOnUiThread {
+                                showProgress(false)
+                                Toast.makeText(this@ProfileSetupActivity, "Invalid Auth Server Response", Toast.LENGTH_SHORT).show()
+                            }
+                            return
+                        }
 
                         val getUploadUrlRequest = Request.Builder()
                             .url("$apiUrl/b2api/v2/b2_get_upload_url")
@@ -213,8 +221,16 @@ class ProfileSetupActivity : AppCompatActivity() {
 
                                     try {
                                         val uploadJson = JSONObject(responseBody)
-                                        val uploadUrl = uploadJson.getString("uploadUrl")
-                                        val uploadAuthToken = uploadJson.getString("authorizationToken")
+                                        val uploadUrl = uploadJson.optString("uploadUrl")
+                                        val uploadAuthToken = uploadJson.optString("authorizationToken")
+
+                                        if (uploadUrl.isEmpty() || uploadAuthToken.isEmpty()) {
+                                            runOnUiThread {
+                                                showProgress(false)
+                                                Toast.makeText(this@ProfileSetupActivity, "Invalid Upload Response", Toast.LENGTH_SHORT).show()
+                                            }
+                                            return
+                                        }
 
                                         // Professional: Compress image before upload to prevent timeout
                                         val compressedFile = compressImage(uri) ?: uriToFile(uri)

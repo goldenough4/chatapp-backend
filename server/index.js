@@ -6,12 +6,22 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.get('/ping', (req, res) => {
-  res.status(200).send('pong');
-});
 app.set('trust proxy', 1); // Trust reverse proxies (Render, Railway, Cloudflare, Heroku)
 app.use(cors());
 app.use(express.json());
+
+// Root & API Endpoints placed at the top to prevent 404s and interception
+app.get('/', (req, res) => {
+  res.status(200).send('Server is awake!');
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', server: 'ChatApp Production OTP Server', timestamp: new Date() });
+});
+
+app.get('/ping', (req, res) => {
+  res.status(200).send('pong');
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -42,6 +52,9 @@ function initTransporter() {
       host: 'smtp.gmail.com',
       port: 465,
       secure: true, // SSL port 465 is extremely reliable
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      socketTimeout: 30000,
       auth: {
         user: user,
         pass: pass
@@ -97,7 +110,13 @@ async function sendOtpDelivery(target, type, code) {
           to: target,
           subject: subject,
           text: `ChatApp your code is ${code}`,
-          html: htmlContent
+          html: htmlContent,
+          priority: 'high',
+          headers: {
+            'X-Priority': '1',
+            'X-MSMail-Priority': 'High',
+            'Importance': 'high'
+          }
         };
         const info = await transporter.sendMail(mailOptions);
         console.log(`[SMTP SUCCESS] Sent verification email to ${target}. Message ID: ${info.messageId}`);
@@ -241,13 +260,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// HTTP Fallback Endpoints
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', server: 'ChatApp Production OTP Server', timestamp: new Date() });
-});
-
 app.post('/api/request-otp', (req, res) => {
-  const { target, type } = req.body;
+  const { target, type } = req.body || {};
   if (!target) {
     return res.status(400).json({ success: false, message: 'Target email or phone is required.' });
   }
@@ -256,7 +270,7 @@ app.post('/api/request-otp', (req, res) => {
 });
 
 app.post('/api/verify-otp', (req, res) => {
-  const { target, otp } = req.body;
+  const { target, otp } = req.body || {};
   if (!target || !otp) {
     return res.status(400).json({ success: false, message: 'Target and OTP code are required.' });
   }
@@ -269,13 +283,13 @@ server.listen(PORT, () => {
   console.log(` ChatApp OTP Socket.io Server running on port ${PORT}`);
   console.log(`=======================================================`);
 
-  // Keep-alive self-ping every 14 minutes to prevent Render free tier from spinning down
   // Keep-alive self-ping every 10 minutes to prevent Render free tier from spinning down
   const PING_INTERVAL_MS = 10 * 60 * 1000;
   setInterval(() => {
     const selfUrl = 'https://chatapp-backend-dwhh6.onrender.com/health';
+    const client = require('https');
 
-    https.get(selfUrl, (res) => {
+    client.get(selfUrl, (res) => {
       console.log(`[KEEP-ALIVE] Self-ping status: ${res.statusCode}`);
     }).on('error', (err) => {
       console.warn('[KEEP-ALIVE] Self-ping error:', err.message);

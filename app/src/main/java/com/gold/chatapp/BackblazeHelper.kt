@@ -48,24 +48,33 @@ object BackblazeHelper {
                             return
                         }
 
-                        val bodyStr = response.body?.string() ?: ""
-                        val authJson = JSONObject(bodyStr)
-                        val apiUrl = authJson.getString("apiUrl")
-                        val authToken = authJson.getString("authorizationToken")
-                        val downloadUrl = authJson.getString("downloadUrl")
+                        try {
+                            val bodyStr = response.body?.string() ?: ""
+                            val authJson = JSONObject(bodyStr)
+                            val apiUrl = authJson.optString("apiUrl")
+                            val authToken = authJson.optString("authorizationToken")
+                            val downloadUrl = authJson.optString("downloadUrl")
 
-                        // STEP 2: Get Upload URL
-                        getUploadUrl(
-                            apiUrl,
-                            authToken,
-                            bucketId,
-                            file,
-                            mimeType,
-                            downloadUrl,
-                            onProgress,
-                            onSuccess,
-                            onError,
-                        )
+                            if (apiUrl.isEmpty() || authToken.isEmpty()) {
+                                onError("Invalid auth response from storage server")
+                                return
+                            }
+
+                            // STEP 2: Get Upload URL
+                            getUploadUrl(
+                                apiUrl,
+                                authToken,
+                                bucketId,
+                                file,
+                                mimeType,
+                                downloadUrl,
+                                onProgress,
+                                onSuccess,
+                                onError,
+                            )
+                        } catch (e: Exception) {
+                            onError("Auth response parse error: ${e.message}")
+                        }
                     }
                 }
             },
@@ -105,22 +114,31 @@ object BackblazeHelper {
                             return
                         }
 
-                        val bodyStr = response.body?.string() ?: ""
-                        val uploadJson = JSONObject(bodyStr)
-                        val uploadUrl = uploadJson.getString("uploadUrl")
-                        val uploadAuthToken = uploadJson.getString("authorizationToken")
+                        try {
+                            val bodyStr = response.body?.string() ?: ""
+                            val uploadJson = JSONObject(bodyStr)
+                            val uploadUrl = uploadJson.optString("uploadUrl")
+                            val uploadAuthToken = uploadJson.optString("authorizationToken")
 
-                        // STEP 3: Final Upload with Progress
-                        performActualUpload(
-                            uploadUrl,
-                            uploadAuthToken,
-                            file,
-                            mimeType,
-                            downloadUrl,
-                            onProgress,
-                            onSuccess,
-                            onError,
-                        )
+                            if (uploadUrl.isEmpty() || uploadAuthToken.isEmpty()) {
+                                onError("Invalid upload URL response from storage server")
+                                return
+                            }
+
+                            // STEP 3: Final Upload with Progress
+                            performActualUpload(
+                                uploadUrl,
+                                uploadAuthToken,
+                                file,
+                                mimeType,
+                                downloadUrl,
+                                onProgress,
+                                onSuccess,
+                                onError,
+                            )
+                        } catch (e: Exception) {
+                            onError("Upload URL parse error: ${e.message}")
+                        }
                     }
                 }
             },
@@ -172,8 +190,11 @@ object BackblazeHelper {
                     response.use {
                         if (response.isSuccessful) {
                             val bodyStr = response.body?.string() ?: ""
-                            val respJson = JSONObject(bodyStr)
-                            val fileName = respJson.getString("fileName")
+                            val fileName = try {
+                                JSONObject(bodyStr).optString("fileName", file.name)
+                            } catch (_: Exception) {
+                                file.name
+                            }
                             // Construct the clean URL for your private bucket
                             val finalUrl = "$downloadUrl/file/chatapp-voice/$fileName"
                             onSuccess(finalUrl)

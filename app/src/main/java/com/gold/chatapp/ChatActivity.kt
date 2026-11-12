@@ -726,7 +726,7 @@ class ChatActivity : AppCompatActivity() {
                         client.newCall(request).execute().use { response ->
                             if (response.isSuccessful) {
                                 val bodyStr = response.body?.string() ?: ""
-                                val upName = JSONObject(bodyStr).getString("fileName")
+                                val upName = try { JSONObject(bodyStr).optString("fileName", fileName) } catch (_: Exception) { fileName }
                                 val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                                 runOnUiThread {
                                     val updates = if (type == "image") {
@@ -795,9 +795,9 @@ class ChatActivity : AppCompatActivity() {
                     val body = response.body?.string() ?: return
                     try {
                         val json = JSONObject(body)
-                        b2MainToken = json.getString("authorizationToken")
-                        b2ApiUrl = json.getString("apiUrl")
-                        b2DownloadUrl = json.getString("downloadUrl")
+                        b2MainToken = json.optString("authorizationToken", "")
+                        b2ApiUrl = json.optString("apiUrl", "")
+                        b2DownloadUrl = json.optString("downloadUrl", "")
                         fetchUploadUrlSync()
                         runOnUiThread { chatAdapter.updateToken(b2MainToken) }
                     } catch (ex: Exception) {
@@ -819,9 +819,10 @@ class ChatActivity : AppCompatActivity() {
                 )
                 .build()
             client.newCall(getUrlRequest).execute().use { res ->
-                val body = JSONObject(res.body?.string() ?: "")
-                cachedUploadUrl = body.getString("uploadUrl")
-                cachedUploadToken = body.getString("authorizationToken")
+                val bodyStr = res.body?.string() ?: ""
+                val body = JSONObject(bodyStr)
+                cachedUploadUrl = body.optString("uploadUrl", "")
+                cachedUploadToken = body.optString("authorizationToken", "")
             }
         } catch (ex: Exception) {
             Log.e("B2_URL", "Fetch failed: ${ex.message}")
@@ -1167,7 +1168,7 @@ class ChatActivity : AppCompatActivity() {
                         client.newCall(req).execute().use { response ->
                             if (response.isSuccessful) {
                                 val bodyStr = response.body?.string() ?: ""
-                                val upName = JSONObject(bodyStr).getString("fileName")
+                                val upName = try { JSONObject(bodyStr).optString("fileName", "voice.m4a") } catch (_: Exception) { "voice.m4a" }
                                 val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                                 runOnUiThread {
                                     activeUploads.remove(docId)
@@ -1275,7 +1276,7 @@ class ChatActivity : AppCompatActivity() {
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val bodyStr = response.body?.string() ?: ""
-                        val upName = JSONObject(bodyStr).getString("fileName")
+                        val upName = try { JSONObject(bodyStr).optString("fileName", fileName) } catch (_: Exception) { fileName }
                         val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                         val updates = if (type == "image") {
                             mapOf(
@@ -1374,7 +1375,7 @@ class ChatActivity : AppCompatActivity() {
                 client.newCall(req).execute().use { response ->
                     if (response.isSuccessful) {
                         val bodyStr = response.body?.string() ?: ""
-                        val upName = JSONObject(bodyStr).getString("fileName")
+                        val upName = try { JSONObject(bodyStr).optString("fileName", "voice.m4a") } catch (_: Exception) { "voice.m4a" }
                         val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                         db.collection("chats").document(chatId).collection("messages")
                             .document(docId).update(

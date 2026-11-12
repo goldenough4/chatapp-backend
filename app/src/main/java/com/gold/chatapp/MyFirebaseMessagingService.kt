@@ -176,7 +176,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             if (conn.responseCode == 200) {
                 val bodyStr = conn.inputStream.bufferedReader().readText()
                 val json = JSONObject(bodyStr)
-                val token = json.getString("authorizationToken")
+                val token = json.optString("authorizationToken", "")
+                if (token.isEmpty()) return null
                 
                 // Cache for 23 hours (B2 tokens usually last 24h)
                 cachedToken = token

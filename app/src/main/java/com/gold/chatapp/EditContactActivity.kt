@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.widget.*
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 
@@ -81,14 +80,20 @@ class EditContactActivity : AppCompatActivity() {
     }
 
     private fun updateContactInPrefs(newName: String, newPhone: String) {
+        val cleanIdentifier = newPhone.trim().lowercase()
+        val cleanOldIdentifier = contactPhone.trim().lowercase()
         val prefs = getSharedPreferences("contacts_prefs", MODE_PRIVATE)
         val currentContacts = prefs.getStringSet("contacts", emptySet())?.toMutableSet() ?: mutableSetOf()
 
-        // Remove old entry if phone changed or just to refresh
-        currentContacts.removeAll { it.contains(contactPhone) }
-        currentContacts.add("$newName|$newPhone")
-        
-        prefs.edit { putStringSet("contacts", currentContacts) }
+        // Remove old entry if identifier changed or just to refresh
+        currentContacts.removeAll { entry ->
+            val parts = entry.split("|")
+            if (parts.size >= 2) {
+                val id = parts[1].trim().lowercase()
+                id == cleanOldIdentifier || id == cleanIdentifier
+            } else false
+        }
+        currentContacts.add("$newName|$cleanIdentifier")
 
         // Update map
         val mapString = prefs.getString("contacts_map", "") ?: ""
@@ -96,19 +101,28 @@ class EditContactActivity : AppCompatActivity() {
         if (mapString.isNotEmpty()) {
             mapString.split(";").forEach { part ->
                 val p = part.split("|")
-                if (p.size == 2) contactMap[p[1]] = p[0]
+                if (p.size == 2) {
+                    val k = p[1].trim().lowercase()
+                    val v = p[0].trim()
+                    if (k.isNotEmpty()) contactMap[k] = v
+                }
             }
         }
         
-        contactMap.remove(contactPhone)
-        contactMap[newPhone] = newName
+        contactMap.remove(cleanOldIdentifier)
+        contactMap[cleanIdentifier] = newName
 
         val newMapString = contactMap.entries.joinToString(";") { "${it.value}|${it.key}" }
-        prefs.edit { putString("contacts_map", newMapString) }
+
+        // Synchronous commit with fresh HashSet
+        prefs.edit()
+            .putStringSet("contacts", HashSet(currentContacts))
+            .putString("contacts_map", newMapString)
+            .commit()
 
         val broadcastIntent = android.content.Intent("com.gold.chatapp.CONTACT_UPDATED").apply {
-            putExtra("old_phone", contactPhone)
-            putExtra("new_phone", newPhone)
+            putExtra("old_phone", cleanOldIdentifier)
+            putExtra("new_phone", cleanIdentifier)
             putExtra("new_name", newName)
         }
         sendBroadcast(broadcastIntent)
