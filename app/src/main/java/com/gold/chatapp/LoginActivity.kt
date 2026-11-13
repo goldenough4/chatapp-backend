@@ -50,16 +50,7 @@ class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
-        val savedUser = prefs.getString("user_phone", null)
-        val profileDone = prefs.getBoolean("profile_done", false)
-
-        if (!savedUser.isNullOrEmpty() && profileDone) {
-            startActivity(Intent(this, MainActivity::class.java))
-            finish()
-            return
-        }
-
+        // Ensure LoginActivity is always shown first on app startup without auto-skipping
         setContentView(R.layout.activity_login)
 
         phoneInput = findViewById(R.id.phone_input)
