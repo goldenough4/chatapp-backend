@@ -57,17 +57,15 @@ class AddContactActivity : AppCompatActivity() {
     }
 
     private fun searchAndSaveContact(name: String, identifier: String) {
-        // Search the global "users" collection for this phone number or email by document ID or field query
+        // Search the global "users" collection for this phone number or email by document ID or field query,
+        // treating email and phone as equal and independent primary identifiers without forcing overrides.
         db.collection("users")
             .document(identifier)
             .get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
-                    val primaryId = document.getString("phone")?.takeIf { it.isNotEmpty() } 
-                        ?: document.getString("email")?.takeIf { it.isNotEmpty() } 
-                        ?: document.id
                     Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
-                    saveToPrefs(name, primaryId)
+                    saveToPrefs(name, identifier)
                 } else {
                     val fieldQueryField = if (identifier.contains("@")) "email" else "phone"
                     db.collection("users")
@@ -75,12 +73,8 @@ class AddContactActivity : AppCompatActivity() {
                         .get()
                         .addOnSuccessListener { querySnapshot ->
                             if (!querySnapshot.isEmpty) {
-                                val doc = querySnapshot.documents[0]
-                                val primaryId = doc.getString("phone")?.takeIf { it.isNotEmpty() } 
-                                    ?: doc.getString("email")?.takeIf { it.isNotEmpty() } 
-                                    ?: doc.id
                                 Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
-                                saveToPrefs(name, primaryId)
+                                saveToPrefs(name, identifier)
                             } else {
                                 Toast.makeText(this, "User not registered, but added", Toast.LENGTH_SHORT).show()
                                 saveToPrefs(name, identifier)
