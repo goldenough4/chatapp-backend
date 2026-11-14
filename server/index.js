@@ -3,25 +3,42 @@ const http = require('http');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
+const dns = require('dns');
 require('dotenv').config();
 
+// Force IPv4 resolution first to prevent 30s connection timeouts
+// on platforms without IPv6 egress
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 const app = express();
-app.set('trust proxy', 1); // Trust reverse proxies (Render, Railway, Cloudflare, Heroku)
+app.set('trust proxy', 1); // Trust reverse proxies (Render, Railway, Heroku)
 app.use(cors());
 app.use(express.json());
 
-// Root & API Endpoints placed at the top to prevent 404s and interception
-app.get('/', (req, res) => {
+// Root & Health Check Endpoints
+// Using app.all to handle GET, HEAD, OPTIONS and prevent 404s
+const handleRoot = (req, res) => {
   res.status(200).send('Server is awake!');
-});
+};
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', server: 'ChatApp Production OTP Server', timestamp: new Date() });
-});
+const handleHealth = (req, res) => {
+  res.json({
+    status: 'ok',
+    server: 'ChatApp Production OTP Server',
+    timestamp: new Date()
+  });
+};
 
-app.get('/ping', (req, res) => {
+const handlePing = (req, res) => {
   res.status(200).send('pong');
-});
+};
+
+app.all('/', handleRoot);
+app.all('/index.html', handleRoot);
+app.all('/health', handleHealth);
+app.all('/ping', handlePing);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -40,32 +57,71 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Standard Gmail SMTP)
+// Transporter setup (High-Reliability Pooled SMTP Transporter)
 let transporter = null;
 
 function initTransporter() {
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
     const user = process.env.SMTP_USER.trim();
     const pass = process.env.SMTP_PASS.trim();
+    const host = process.env.SMTP_HOST
+      ? process.env.SMTP_HOST.trim()
+      : 'smtp.gmail.com';
+    const port = process.env.SMTP_PORT
+      ? parseInt(process.env.SMTP_PORT, 10)
+      : 587;
+    const secure = process.env.SMTP_SECURE !== undefined
+      ? process.env.SMTP_SECURE === 'true'
+      : (port === 465);
+
+    const serviceName = process.env.SMTP_SERVICE ||
+      (host.includes('gmail') ? 'gmail' : undefined);
 
     transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true, // SSL port 465 is extremely reliable
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-      socketTimeout: 30000,
+      service: serviceName,
+      host: host,
+      port: port,
+      secure: secure,
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      rateDelta: 1000,
+      rateLimit: 5,
+      family: 4, // Enforce IPv4 socket creation to eliminate timeouts
+      connectionTimeout: 15000, // 15s connection establishment timeout
+      greetingTimeout: 15000,   // 15s greeting timeout
+      socketTimeout: 30000,     // 30s socket inactivity timeout
       auth: {
         user: user,
         pass: pass
       },
       tls: {
         rejectUnauthorized: false
+      },
+      keepAlive: true
+    });
+
+    transporter.verify((error) => {
+      if (error) {
+        console.error(
+          '[MAIL VERIFY ERROR] Transporter connection check failed:',
+          error.message
+        );
+      } else {
+        console.log(
+          `[MAIL VERIFY SUCCESS] SMTP transporter ready for: ${user}`
+        );
       }
     });
-    console.log(`[MAIL] Initialized Gmail SMTP transporter for: ${user}`);
+
+    console.log(
+      `[MAIL] Initialized pooled SMTP transporter for: ${user} ` +
+      `(${host}:${port}, secure=${secure}, family=IPv4)`
+    );
   } else {
-    console.warn('[MAIL WARNING] SMTP_USER and SMTP_PASS environment variables are not set.');
+    console.warn(
+      '[MAIL WARNING] SMTP_USER and SMTP_PASS env variables are not set.'
+    );
   }
 }
 
@@ -86,7 +142,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via SMTP
+// Helper function to send OTP via SMTP with automatic retry logic
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -104,30 +160,52 @@ async function sendOtpDelivery(target, type, code) {
     `;
 
     if (transporter) {
-      try {
-        const mailOptions = {
-          from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
-          to: target,
-          subject: subject,
-          text: `ChatApp your code is ${code}`,
-          html: htmlContent,
-          priority: 'high',
-          headers: {
-            'X-Priority': '1',
-            'X-MSMail-Priority': 'High',
-            'Importance': 'high'
+      const mailOptions = {
+        from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
+        to: target,
+        subject: subject,
+        text: `ChatApp your code is ${code}`,
+        html: htmlContent,
+        priority: 'high',
+        headers: {
+          'X-Priority': '1',
+          'X-MSMail-Priority': 'High',
+          'Importance': 'high'
+        }
+      };
+
+      const MAX_RETRIES = 2;
+      let sentSuccess = false;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const info = await transporter.sendMail(mailOptions);
+          console.log(
+            `[SMTP SUCCESS] Sent verification email to ${target}. ` +
+            `Message ID: ${info.messageId} (Attempt ${attempt})`
+          );
+          sentSuccess = true;
+          break;
+        } catch (err) {
+          console.error(
+            `[SMTP ERROR] Attempt ${attempt}/${MAX_RETRIES} failed for ${target}:`,
+            err.message
+          );
+          if (attempt < MAX_RETRIES) {
+            await new Promise((res) => setTimeout(res, 1000));
           }
-        };
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`[SMTP SUCCESS] Sent verification email to ${target}. Message ID: ${info.messageId}`);
-      } catch (err) {
-        console.error(`[SMTP ERROR] Failed to send email to ${target}:`, err.message);
+        }
+      }
+
+      if (!sentSuccess) {
         console.log(`=======================================================`);
         console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
         console.log(`=======================================================`);
       }
     } else {
-      console.warn(`[MAIL WARNING] Transporter unconfigured. Printing email OTP to console.`);
+      console.warn(
+        `[MAIL WARNING] Transporter unconfigured. Printing OTP to console.`
+      );
       console.log(`=======================================================`);
       console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
@@ -147,7 +225,9 @@ function storeAndDispatchOtp(target, type) {
 
   // Rate limiting: 30 seconds cooldown between new OTP requests
   if (existing && Date.now() - existing.createdAt < 30000) {
-    const remainingSec = Math.ceil((30000 - (Date.now() - existing.createdAt)) / 1000);
+    const remainingSec = Math.ceil(
+      (30000 - (Date.now() - existing.createdAt)) / 1000
+    );
     return {
       success: false,
       message: `Please wait ${remainingSec} seconds before requesting a new code.`
@@ -181,22 +261,33 @@ function verifyOtpCode(target, inputCode) {
   const record = otpStore.get(normalizedTarget);
 
   if (!record) {
-    return { success: false, message: 'No OTP code found or code has expired. Please request a new code.' };
+    return {
+      success: false,
+      message: 'No OTP code found or code has expired. Please request a new code.'
+    };
   }
 
   if (Date.now() > record.expiresAt) {
     otpStore.delete(normalizedTarget);
-    return { success: false, message: 'Verification code has expired. Please request a new code.' };
+    return {
+      success: false,
+      message: 'Verification code has expired. Please request a new code.'
+    };
   }
 
   if (record.attempts >= MAX_ATTEMPTS) {
     otpStore.delete(normalizedTarget);
-    return { success: false, message: 'Too many invalid attempts. Code invalidated. Please request a new code.' };
+    return {
+      success: false,
+      message: 'Too many invalid attempts. Code invalidated. Please request a new code.'
+    };
   }
 
   if (record.code.trim() === inputCode.trim()) {
     otpStore.delete(normalizedTarget);
-    const authSessionToken = Buffer.from(`${normalizedTarget}:${Date.now()}`).toString('base64');
+    const authSessionToken = Buffer.from(
+      `${normalizedTarget}:${Date.now()}`
+    ).toString('base64');
     return {
       success: true,
       target: normalizedTarget,
@@ -220,7 +311,10 @@ io.on('connection', (socket) => {
   socket.on('request_otp', (data) => {
     const { target, type } = data || {};
     if (!target) {
-      return socket.emit('otp_error', { success: false, message: 'Target email or phone is required.' });
+      return socket.emit('otp_error', {
+        success: false,
+        message: 'Target email or phone is required.'
+      });
     }
 
     const result = storeAndDispatchOtp(target, type);
@@ -234,7 +328,10 @@ io.on('connection', (socket) => {
   socket.on('verify_otp', (data) => {
     const { target, otp } = data || {};
     if (!target || !otp) {
-      return socket.emit('otp_verified', { success: false, message: 'Target and OTP code are required.' });
+      return socket.emit('otp_verified', {
+        success: false,
+        message: 'Target and OTP code are required.'
+      });
     }
 
     const result = verifyOtpCode(target, otp);
@@ -244,7 +341,10 @@ io.on('connection', (socket) => {
   socket.on('resend_otp', (data) => {
     const { target, type } = data || {};
     if (!target) {
-      return socket.emit('otp_error', { success: false, message: 'Target email or phone is required.' });
+      return socket.emit('otp_error', {
+        success: false,
+        message: 'Target email or phone is required.'
+      });
     }
 
     const result = storeAndDispatchOtp(target, type);
@@ -263,7 +363,10 @@ io.on('connection', (socket) => {
 app.post('/api/request-otp', (req, res) => {
   const { target, type } = req.body || {};
   if (!target) {
-    return res.status(400).json({ success: false, message: 'Target email or phone is required.' });
+    return res.status(400).json({
+      success: false,
+      message: 'Target email or phone is required.'
+    });
   }
   const result = storeAndDispatchOtp(target, type);
   return res.status(result.success ? 200 : 429).json(result);
@@ -272,10 +375,21 @@ app.post('/api/request-otp', (req, res) => {
 app.post('/api/verify-otp', (req, res) => {
   const { target, otp } = req.body || {};
   if (!target || !otp) {
-    return res.status(400).json({ success: false, message: 'Target and OTP code are required.' });
+    return res.status(400).json({
+      success: false,
+      message: 'Target and OTP code are required.'
+    });
   }
   const result = verifyOtpCode(target, otp);
   return res.status(result.success ? 200 : 400).json(result);
+});
+
+// Fallback for unmatched routes
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found.`
+  });
 });
 
 server.listen(PORT, () => {
@@ -283,7 +397,7 @@ server.listen(PORT, () => {
   console.log(` ChatApp OTP Socket.io Server running on port ${PORT}`);
   console.log(`=======================================================`);
 
-  // Keep-alive self-ping every 10 minutes to prevent Render free tier from spinning down
+  // Keep-alive self-ping every 10 minutes to prevent Render from spinning down
   const PING_INTERVAL_MS = 10 * 60 * 1000;
   setInterval(() => {
     const selfUrl = 'https://chatapp-backend-dwhh6.onrender.com/health';
