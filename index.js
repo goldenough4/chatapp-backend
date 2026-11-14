@@ -57,7 +57,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (High-Reliability Pooled SMTP Transporter)
+// Transporter setup (High-Reliability Pooled SMTP Transporter over Port 587 STARTTLS)
 let transporter = null;
 
 function initTransporter() {
@@ -74,14 +74,11 @@ function initTransporter() {
       ? process.env.SMTP_SECURE === 'true'
       : (port === 465);
 
-    const serviceName = process.env.SMTP_SERVICE ||
-      (host.includes('gmail') ? 'gmail' : undefined);
-
     transporter = nodemailer.createTransport({
-      service: serviceName,
       host: host,
       port: port,
       secure: secure,
+      requireTLS: !secure, // Enable STARTTLS over port 587
       pool: true,
       maxConnections: 5,
       maxMessages: 100,
