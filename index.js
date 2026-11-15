@@ -52,9 +52,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup using Nodemailer native non-socket streamTransport
-// Configured with chatappsupport2026@gmail.com and App Password authentication
-// Avoids all outbound SMTP socket blocks, ports (465/587/25/2525), and timeouts entirely.
+// Nodemailer Transporter Setup: smtp.gmail.com on Port 465 with secure: true
 let transporter = null;
 
 try {
@@ -62,16 +60,19 @@ try {
   const pass = process.env.SMTP_PASS ? process.env.SMTP_PASS.trim() : '';
 
   transporter = nodemailer.createTransport({
-    streamTransport: true,
-    buffer: true,
-    newline: 'unix',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: user,
       pass: pass
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
 
-  console.log(`[MAIL] Initialized native non-socket local delivery transporter for: ${user} (streamTransport mode)`);
+  console.log(`[MAIL] Initialized SMTPS transporter for ${user} (smtp.gmail.com:465, secure=true)`);
 } catch (err) {
   console.error('[MAIL ERROR] Failed to initialize transporter:', err.message);
 }
@@ -95,77 +96,73 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to process OTP delivery via Nodemailer streamTransport with zero-crash resilience
+// Fire-and-Forget Architecture (Asynchronous Non-blocking Dispatch)
 async function sendOtpDelivery(target, type, code) {
-  try {
-    const isEmail = type === 'email' || target.includes('@');
+  const isEmail = type === 'email' || target.includes('@');
 
-    if (isEmail) {
-      const subject = 'ChatApp Verification Code';
-      const htmlContent = `
-        <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px;
-             margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px;
-             background-color: white;">
-          <h1 style="color: #075E54; text-align: center; font-size: 26px;
-               font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
-          <p style="font-size: 16px; color: #333333; text-align: center;
-             margin-bottom: 15px;">Your verification code is</p>
-          <div style="background-color: #f0f2f5; padding: 18px; text-align: center;
-               font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54;
-               border-radius: 8px; margin-bottom: 20px;">
-            ${code}
-          </div>
-          <p style="text-align: center; color: #666666; font-size: 13px;">
-            This code will expire in 5 minutes.
-          </p>
+  if (isEmail) {
+    const subject = 'ChatApp Verification Code';
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px;
+           margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px;
+           background-color: white;">
+        <h1 style="color: #075E54; text-align: center; font-size: 26px;
+             font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
+        <p style="font-size: 16px; color: #333333; text-align: center;
+           margin-bottom: 15px;">Your verification code is</p>
+        <div style="background-color: #f0f2f5; padding: 18px; text-align: center;
+             font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54;
+             border-radius: 8px; margin-bottom: 20px;">
+          ${code}
         </div>
-      `;
+        <p style="text-align: center; color: #666666; font-size: 13px;">
+          This code will expire in 5 minutes.
+        </p>
+      </div>
+    `;
 
-      const mailOptions = {
-        from: process.env.SMTP_FROM || `"ChatApp Support" <chatappsupport2026@gmail.com>`,
-        to: target,
-        subject: subject,
-        text: `ChatApp your verification code is ${code}`,
-        html: htmlContent,
-        priority: 'high',
-        headers: {
-          'X-Priority': '1',
-          'X-MSMail-Priority': 'High',
-          'Importance': 'high'
-        }
-      };
-
-      if (transporter) {
-        const info = await transporter.sendMail(mailOptions);
-        const emailBody = info.message ? info.message.toString('utf8') : '';
-        console.log(`=======================================================`);
-        console.log(` 📧 [EMAIL OTP GENERATED & LOGGED] Target: ${target} | CODE: ${code}`);
-        console.log(` Message ID: ${info.messageId}`);
-        console.log(`=======================================================`);
-        return { success: true, messageId: info.messageId, code };
-      } else {
-        console.log(`=======================================================`);
-        console.log(` 📧 [EMAIL OTP FALLBACK] Target: ${target} | CODE: ${code}`);
-        console.log(`=======================================================`);
-        return { success: true, code };
+    const mailOptions = {
+      from: process.env.SMTP_FROM || `"ChatApp Support" <chatappsupport2026@gmail.com>`,
+      to: target,
+      subject: subject,
+      text: `ChatApp your verification code is ${code}`,
+      html: htmlContent,
+      priority: 'high',
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high'
       }
-    } else {
-      // Phone OTP
-      console.log(`=======================================================`);
-      console.log(` 📱 [PHONE OTP] Target: ${target} | CODE: ${code}`);
-      console.log(`=======================================================`);
-      return { success: true, code };
-    }
-  } catch (err) {
-    console.error(`[DELIVERY ERROR RESILIENCE] Failed for ${target}: ${err.message}`);
+    };
+
+    // Asynchronous background dispatch with robust try-catch
+    setImmediate(async () => {
+      try {
+        if (transporter) {
+          const info = await transporter.sendMail(mailOptions);
+          console.log(`[SMTP SUCCESS] Email sent to ${target}. Message ID: ${info.messageId}`);
+        } else {
+          console.log(`[SMTP LOG] Transporter not configured. Target: ${target} | CODE: ${code}`);
+        }
+      } catch (err) {
+        console.error(`[SMTP ERROR MANAGED] Failed to send email to ${target}: ${err.message}`, {
+          code: err.code || 'UNKNOWN',
+          command: err.command || 'SMTP_DISPATCH'
+        });
+        console.log(`=======================================================`);
+        console.log(` 📧 [FALLBACK OTP] Target: ${target} | CODE: ${code}`);
+        console.log(`=======================================================`);
+      }
+    });
+  } else {
+    // Phone OTP
     console.log(`=======================================================`);
-    console.log(` 📧 [EMAIL OTP EMERGENCY FALLBACK] Target: ${target} | CODE: ${code}`);
+    console.log(` 📱 [PHONE OTP] Target: ${target} | CODE: ${code}`);
     console.log(`=======================================================`);
-    return { success: true, fallback: true, code };
   }
 }
 
-// Store OTP logic
+// Store OTP logic (Instant response on main thread while email dispatches asynchronously)
 async function storeAndDispatchOtp(target, type) {
   try {
     const normalizedTarget = target.trim().toLowerCase();
@@ -186,8 +183,10 @@ async function storeAndDispatchOtp(target, type) {
     const code = generateOtp();
     const now = Date.now();
 
-    await sendOtpDelivery(normalizedTarget, type, code);
+    // Trigger asynchronous fire-and-forget delivery
+    sendOtpDelivery(normalizedTarget, type, code);
 
+    // Store OTP immediately
     otpStore.set(normalizedTarget, {
       code,
       expiresAt: now + OTP_EXPIRY_MS,
