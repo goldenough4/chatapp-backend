@@ -93,18 +93,6 @@ function initTransporter() {
       }
     });
 
-    // Non-blocking background verification check
-    setImmediate(() => {
-      transporter.verify().then(() => {
-        console.log(`[MAIL VERIFY SUCCESS] SMTP transporter ready for: ${user}`);
-      }).catch((error) => {
-        console.warn(
-          '[MAIL VERIFY WARNING] Background verification check failed:',
-          error.message
-        );
-      });
-    });
-
     console.log(
       `[MAIL] Initialized direct SMTP transporter for: ${user} ` +
       `(${host}:${port}, secure=${secure}, family=IPv4, timeout=30s)`
