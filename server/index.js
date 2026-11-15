@@ -103,6 +103,15 @@ function initTransporter() {
       `[MAIL] Initialized pooled SMTPS transporter for: ${user} ` +
       `(${host}:${port}, secure=${secure}, family=IPv4, pool=true)`
     );
+
+    // Pre-warm SMTP socket connection asynchronously on boot
+    setImmediate(() => {
+      transporter.verify().then(() => {
+        console.log(`[MAIL PRE-WARM] SMTPS socket ready for: ${user}`);
+      }).catch((err) => {
+        console.warn(`[MAIL PRE-WARM WARNING] Pre-warm check: ${err.message}`);
+      });
+    });
   } else {
     console.warn(
       '[MAIL WARNING] SMTP_USER and SMTP_PASS env variables are not set.'
