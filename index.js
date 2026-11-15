@@ -195,6 +195,8 @@ function sendViaHttpsApi(webAppUrl, mailData) {
 }
 
 // Helper to determine exact failure stage during SMTP protocol execution
+/* cspell:disable */
+/* spellchecker: disable */
 // noinspection SpellCheckingInspection
 function determineFailureStage(err) {
   const cmd = (err.command || '').toUpperCase();
@@ -224,6 +226,8 @@ function determineFailureStage(err) {
   }
   return 'SOCKET_TRANSPORT_ERROR';
 }
+/* cspell:enable */
+/* spellchecker: enable */
 
 // Generate cryptographically safe 6-digit OTP
 function generateOtp() {
