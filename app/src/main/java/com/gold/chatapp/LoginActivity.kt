@@ -91,6 +91,7 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun initiateOtpVerification() {
         val phoneNumber = phoneInput.text.toString().trim()
         val email = emailInput.text.toString().trim()
@@ -99,7 +100,22 @@ class LoginActivity : AppCompatActivity() {
 
         continueButton.isEnabled = false
 
+        val progressDialog = android.app.ProgressDialog(this).apply {
+            setMessage("Sending code...")
+            setCancelable(false)
+            setCanceledOnTouchOutside(false)
+        }
+        progressDialog.show()
+
         OtpSocketManager.requestOtp(this, target, targetType) { success, message, _ ->
+            if (!isFinishing && !isDestroyed) {
+                try {
+                    progressDialog.dismiss()
+                } catch (e: Exception) {
+                    Log.w("LOGIN", "Failed to dismiss progress dialog: ${e.message}")
+                }
+            }
+
             if (success) {
                 val intent = Intent(this, OtpVerificationActivity::class.java).apply {
                     putExtra(OtpVerificationActivity.EXTRA_TARGET, target)
