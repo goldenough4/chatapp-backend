@@ -1,22 +1,27 @@
 const express = require('express');
 const http = require('http');
 const https = require('https');
+const tls = require('tls');
+const net = require('net');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const dns = require('dns');
 require('dotenv').config();
 
-// Force IPv4 resolution first to prevent connection timeouts
+// Force IPv4 resolution first to prevent 30s connection timeouts
+// on platforms without IPv6 egress
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder(['ipv4', 'first'].join(''));
 }
 
 const app = express();
-app.set('trust proxy', 1);
+app.set('trust proxy', 1); // Trust reverse proxies (Render, Railway, Heroku)
 app.use(cors());
 app.use(express.json());
 
+// Root & Health Check Endpoints
+// Using app.all to handle GET, HEAD, OPTIONS and prevent 404s
 const handleRoot = (req, res) => {
   res.status(200).send('Server is awake!');
 };
@@ -39,8 +44,8 @@ app.all('/health', handleHealth);
 app.all('/ping', handlePing);
 
 const server = http.createServer(app);
-server.timeout = 0;
-server.keepAliveTimeout = 120000;
+server.timeout = 0; // Disable HTTP socket timeout during email dispatches
+server.keepAliveTimeout = 120000; // 120s keep-alive timeout
 
 const io = new Server(server, {
   pingInterval: 25000,
@@ -58,7 +63,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Optimized Nodemailer SMTP Transporter)
+// Transporter setup (Custom Socket Bound SMTPS Transporter with Zero-Crash Resilience)
 let transporter = null;
 
 function initTransporter() {
@@ -79,27 +84,79 @@ function initTransporter() {
       host: host,
       port: port,
       secure: secure,
+      requireTLS: !secure,
       pool: true,
       maxConnections: 1,
       maxMessages: Infinity,
       rateDelta: 1000,
-      family: 4,
-      connectionTimeout: 15000,
+      family: 4, // Enforce IPv4 socket creation
+      connectionTimeout: 15000, // 15s fast connection timeout
       greetingTimeout: 15000,
       socketTimeout: 20000,
+      logger: true,
       auth: {
         user: user,
         pass: pass
       },
       tls: {
         rejectUnauthorized: false
+      },
+      getSocket: (options, callback) => {
+        try {
+          const socket = tls.connect({
+            host: options.host || host,
+            port: options.port || port,
+            servername: options.host || host,
+            family: 4,
+            rejectUnauthorized: false,
+            timeout: 15000
+          });
+
+          socket.once('secureConnect', () => {
+            callback(null, { socket });
+          });
+
+          socket.once('connect', () => {
+            if (!secure) {
+              callback(null, { socket });
+            }
+          });
+
+          socket.once('error', (err) => {
+            callback(err);
+          });
+
+          socket.once('timeout', () => {
+            socket.destroy(new Error('Custom TLS socket connection timed out'));
+          });
+        } catch (err) {
+          callback(err);
+        }
       }
     });
 
     console.log(
-      `[MAIL] Initialized Nodemailer for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4)`
+      `[MAIL] Initialized custom socket SMTPS transporter for: ${user} ` +
+      `(${host}:${port}, secure=${secure}, family=IPv4, customSocket=true)`
     );
+
+    // Pre-warm SMTP socket connection asynchronously on boot with stage tracing
+    setImmediate(() => {
+      const startTime = Date.now();
+      transporter.verify().then(() => {
+        const elapsed = Date.now() - startTime;
+        console.log(
+          `[MAIL PRE-WARM SUCCESS] Custom socket SMTPS connected in ${elapsed}ms for: ${user}`
+        );
+      }).catch((err) => {
+        const elapsed = Date.now() - startTime;
+        console.warn(`[MAIL PRE-WARM WARNING] Pre-warm note after ${elapsed}ms:`, {
+          message: err.message,
+          code: err.code || 'UNKNOWN',
+          command: err.command || 'VERIFY_INIT'
+        });
+      });
+    });
   } else {
     console.warn(
       '[MAIL WARNING] SMTP_USER and SMTP_PASS env variables are not set.'
@@ -124,7 +181,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via Nodemailer SMTP with fail-safe error handling
+// Helper function to send OTP via Custom Socket Nodemailer with absolute zero-crash resilience
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -155,7 +212,13 @@ async function sendOtpDelivery(target, type, code) {
         to: target,
         subject: subject,
         text: `ChatApp your code is ${code}`,
-        html: htmlContent
+        html: htmlContent,
+        priority: 'high',
+        headers: {
+          'X-Priority': '1',
+          'X-MSMail-Priority': 'High',
+          'Importance': 'high'
+        }
       };
 
       const startTime = Date.now();
@@ -163,15 +226,15 @@ async function sendOtpDelivery(target, type, code) {
         const info = await transporter.sendMail(mailOptions);
         const durationMs = Date.now() - startTime;
         console.log(
-          `[SMTP SUCCESS] Sent email to ${target} in ${durationMs}ms. ` +
+          `[SMTP SUCCESS] Sent verification email to ${target} in ${durationMs}ms. ` +
           `Message ID: ${info.messageId}`
         );
         return { success: true, messageId: info.messageId, durationMs };
       } catch (err) {
         const durationMs = Date.now() - startTime;
-        console.warn(
-          `[SMTP NOTICE] Direct SMTP delivery encountered host block/timeout ` +
-          `after ${durationMs}ms: ${err.message}`
+        console.error(
+          `[SMTP ERROR RESILIENCE] Dispatch failed after ${durationMs}ms ` +
+          `for ${target}: ${err.message}`
         );
         console.log(`=======================================================`);
         console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
