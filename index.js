@@ -1,27 +1,22 @@
 const express = require('express');
 const http = require('http');
 const https = require('https');
-const tls = require('tls');
-const net = require('net');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const dns = require('dns');
 require('dotenv').config();
 
-// Force IPv4 resolution first to prevent 30s connection timeouts
-// on platforms without IPv6 egress
+// Force IPv4 resolution first to prevent connection timeouts
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder(['ipv4', 'first'].join(''));
 }
 
 const app = express();
-app.set('trust proxy', 1); // Trust reverse proxies (Render, Railway, Heroku)
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 
-// Root & Health Check Endpoints
-// Using app.all to handle GET, HEAD, OPTIONS and prevent 404s
 const handleRoot = (req, res) => {
   res.status(200).send('Server is awake!');
 };
@@ -44,8 +39,8 @@ app.all('/health', handleHealth);
 app.all('/ping', handlePing);
 
 const server = http.createServer(app);
-server.timeout = 0; // Disable HTTP socket timeout during email dispatches
-server.keepAliveTimeout = 120000; // 120s keep-alive timeout
+server.timeout = 0;
+server.keepAliveTimeout = 120000;
 
 const io = new Server(server, {
   pingInterval: 25000,
@@ -63,65 +58,56 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Native Node.js Unblocked HTTPS Email Dispatcher over Port 443
-// (Bypasses Render SMTP port firewall)
-function sendViaHttpsApi(webAppUrl, mailData) {
-  return new Promise((resolve, reject) => {
-    try {
-      const url = new URL(webAppUrl);
-      const postData = JSON.stringify(mailData);
+// Transporter setup (Optimized Nodemailer SMTP Transporter)
+let transporter = null;
 
-      const options = {
-        hostname: url.hostname,
-        port: 443,
-        path: url.pathname + url.search,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData)
-        },
-        timeout: 15000 // 15s timeout for HTTPS POST over Port 443
-      };
+function initTransporter() {
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const user = process.env.SMTP_USER.trim();
+    const pass = process.env.SMTP_PASS.trim();
+    const host = process.env.SMTP_HOST
+      ? process.env.SMTP_HOST.trim()
+      : 'smtp.gmail.com';
+    const port = process.env.SMTP_PORT
+      ? parseInt(process.env.SMTP_PORT, 10)
+      : 465;
+    const secure = process.env.SMTP_SECURE !== undefined
+      ? process.env.SMTP_SECURE === 'true'
+      : (port === 465);
 
-      const req = https.request(options, (res) => {
-        let responseBody = '';
-        res.on('data', (chunk) => {
-          responseBody += chunk;
-        });
+    transporter = nodemailer.createTransport({
+      host: host,
+      port: port,
+      secure: secure,
+      pool: true,
+      maxConnections: 1,
+      maxMessages: Infinity,
+      rateDelta: 1000,
+      family: 4,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
+      auth: {
+        user: user,
+        pass: pass
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
 
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 400) {
-            console.log(
-              `[HTTPS MAIL SUCCESS] Email delivered via unblocked Port 443 HTTPS API. ` +
-              `Status: ${res.statusCode}`
-            );
-            resolve({ success: true, statusCode: res.statusCode, body: responseBody });
-          } else {
-            reject(
-              new Error(
-                `HTTPS API returned status ${res.statusCode}: ${responseBody}`
-              )
-            );
-          }
-        });
-      });
-
-      req.on('error', (err) => {
-        reject(err);
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('HTTPS request timed out after 15000ms'));
-      });
-
-      req.write(postData);
-      req.end();
-    } catch (err) {
-      reject(err);
-    }
-  });
+    console.log(
+      `[MAIL] Initialized Nodemailer for: ${user} ` +
+      `(${host}:${port}, secure=${secure}, family=IPv4)`
+    );
+  } else {
+    console.warn(
+      '[MAIL WARNING] SMTP_USER and SMTP_PASS env variables are not set.'
+    );
+  }
 }
+
+initTransporter();
 
 // Generate cryptographically safe 6-digit OTP
 function generateOtp() {
@@ -138,7 +124,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via Unblocked Port 443 HTTPS with absolute zero-crash resilience
+// Helper function to send OTP via Nodemailer SMTP with fail-safe error handling
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -163,39 +149,43 @@ async function sendOtpDelivery(target, type, code) {
       </div>
     `;
 
-    const senderEmail = process.env.SMTP_USER || 'chatappsupport2026@gmail.com';
-    const webAppUrl =
-      process.env.GMAIL_HTTP_URL ||
-      process.env.GMAIL_WEB_APP_URL ||
-      'https://script.google.com/macros/s/AKfycbz_chatapp_otp_service/exec';
+    if (transporter) {
+      const mailOptions = {
+        from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
+        to: target,
+        subject: subject,
+        text: `ChatApp your code is ${code}`,
+        html: htmlContent
+      };
 
-    const mailData = {
-      from: senderEmail,
-      to: target,
-      subject: subject,
-      text: `ChatApp your code is ${code}`,
-      html: htmlContent,
-      code: code
-    };
-
-    const startTime = Date.now();
-    try {
-      const res = await sendViaHttpsApi(webAppUrl, mailData);
-      const durationMs = Date.now() - startTime;
-      console.log(
-        `[HTTPS DISPATCH SUCCESS] Delivered in ${durationMs}ms from ${senderEmail} to ${target}`
-      );
-      return { success: true, durationMs };
-    } catch (err) {
-      const durationMs = Date.now() - startTime;
+      const startTime = Date.now();
+      try {
+        const info = await transporter.sendMail(mailOptions);
+        const durationMs = Date.now() - startTime;
+        console.log(
+          `[SMTP SUCCESS] Sent email to ${target} in ${durationMs}ms. ` +
+          `Message ID: ${info.messageId}`
+        );
+        return { success: true, messageId: info.messageId, durationMs };
+      } catch (err) {
+        const durationMs = Date.now() - startTime;
+        console.warn(
+          `[SMTP NOTICE] Direct SMTP delivery encountered host block/timeout ` +
+          `after ${durationMs}ms: ${err.message}`
+        );
+        console.log(`=======================================================`);
+        console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
+        console.log(`=======================================================`);
+        return { success: true, fallback: true, code };
+      }
+    } else {
       console.warn(
-        `[HTTPS DISPATCH NOTICE] Port 443 dispatch bypassed ` +
-        `blocked ports in ${durationMs}ms: ${err.message}`
+        `[MAIL WARNING] Transporter unconfigured. Printing OTP to console.`
       );
       console.log(`=======================================================`);
-      console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
+      console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
-      return { success: true, fallback: true, code };
+      return { success: true, debug: true };
     }
   } else {
     // Phone OTP
