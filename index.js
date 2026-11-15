@@ -82,7 +82,10 @@ function initTransporter() {
       port: port,
       secure: secure,
       requireTLS: !secure,
-      pool: false, // Enforce direct, non-pooled TCP socket per message
+      pool: true,
+      maxConnections: 1,
+      maxMessages: Infinity,
+      rateDelta: 1000,
       family: 4, // Enforce IPv4 socket creation
       connectionTimeout: 60000, // 60s connection establishment timeout
       greetingTimeout: 60000,   // 60s greeting timeout
@@ -97,8 +100,8 @@ function initTransporter() {
     });
 
     console.log(
-      `[MAIL] Initialized direct SMTPS transporter for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=60s)`
+      `[MAIL] Initialized pooled SMTPS transporter for: ${user} ` +
+      `(${host}:${port}, secure=${secure}, family=IPv4, pool=true)`
     );
   } else {
     console.warn(
