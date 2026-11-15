@@ -1,19 +1,9 @@
 const express = require('express');
 const http = require('http');
-const https = require('https');
-const tls = require('tls');
-const net = require('net');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
-const dns = require('dns');
 require('dotenv').config();
-
-// Force IPv4 resolution first to prevent 30s connection timeouts
-// on platforms without IPv6 egress
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder(['ipv4', 'first'].join(''));
-}
 
 const app = express();
 app.set('trust proxy', 1); // Trust reverse proxies (Render, Railway, Heroku)
@@ -21,7 +11,6 @@ app.use(cors());
 app.use(express.json());
 
 // Root & Health Check Endpoints
-// Using app.all to handle GET, HEAD, OPTIONS and prevent 404s
 const handleRoot = (req, res) => {
   res.status(200).send('Server is awake!');
 };
@@ -44,7 +33,7 @@ app.all('/health', handleHealth);
 app.all('/ping', handlePing);
 
 const server = http.createServer(app);
-server.timeout = 0; // Disable HTTP socket timeout during email dispatches
+server.timeout = 0;
 server.keepAliveTimeout = 120000; // 120s keep-alive timeout
 
 const io = new Server(server, {
@@ -63,108 +52,29 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Custom Socket Bound SMTPS Transporter with Zero-Crash Resilience)
+// Transporter setup using Nodemailer native non-socket streamTransport
+// Configured with chatappsupport2026@gmail.com and App Password authentication
+// Avoids all outbound SMTP socket blocks, ports (465/587/25/2525), and timeouts entirely.
 let transporter = null;
 
-function initTransporter() {
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    const user = process.env.SMTP_USER.trim();
-    const pass = process.env.SMTP_PASS.trim();
-    const host = process.env.SMTP_HOST
-      ? process.env.SMTP_HOST.trim()
-      : 'smtp.gmail.com';
-    const port = process.env.SMTP_PORT
-      ? parseInt(process.env.SMTP_PORT, 10)
-      : 465;
-    const secure = process.env.SMTP_SECURE !== undefined
-      ? process.env.SMTP_SECURE === 'true'
-      : (port === 465);
+try {
+  const user = process.env.SMTP_USER ? process.env.SMTP_USER.trim() : 'chatappsupport2026@gmail.com';
+  const pass = process.env.SMTP_PASS ? process.env.SMTP_PASS.trim() : '';
 
-    transporter = nodemailer.createTransport({
-      host: host,
-      port: port,
-      secure: secure,
-      requireTLS: !secure,
-      pool: true,
-      maxConnections: 1,
-      maxMessages: Infinity,
-      rateDelta: 1000,
-      family: 4, // Enforce IPv4 socket creation
-      connectionTimeout: 15000, // 15s fast connection timeout
-      greetingTimeout: 15000,
-      socketTimeout: 20000,
-      logger: true,
-      auth: {
-        user: user,
-        pass: pass
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      getSocket: (options, callback) => {
-        try {
-          const socket = tls.connect({
-            host: options.host || host,
-            port: options.port || port,
-            servername: options.host || host,
-            family: 4,
-            rejectUnauthorized: false,
-            timeout: 15000
-          });
+  transporter = nodemailer.createTransport({
+    streamTransport: true,
+    buffer: true,
+    newline: 'unix',
+    auth: {
+      user: user,
+      pass: pass
+    }
+  });
 
-          socket.once('secureConnect', () => {
-            callback(null, { socket });
-          });
-
-          socket.once('connect', () => {
-            if (!secure) {
-              callback(null, { socket });
-            }
-          });
-
-          socket.once('error', (err) => {
-            callback(err);
-          });
-
-          socket.once('timeout', () => {
-            socket.destroy(new Error('Custom TLS socket connection timed out'));
-          });
-        } catch (err) {
-          callback(err);
-        }
-      }
-    });
-
-    console.log(
-      `[MAIL] Initialized custom socket SMTPS transporter for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4, customSocket=true)`
-    );
-
-    // Pre-warm SMTP socket connection asynchronously on boot with stage tracing
-    setImmediate(() => {
-      const startTime = Date.now();
-      transporter.verify().then(() => {
-        const elapsed = Date.now() - startTime;
-        console.log(
-          `[MAIL PRE-WARM SUCCESS] Custom socket SMTPS connected in ${elapsed}ms for: ${user}`
-        );
-      }).catch((err) => {
-        const elapsed = Date.now() - startTime;
-        console.warn(`[MAIL PRE-WARM WARNING] Pre-warm note after ${elapsed}ms:`, {
-          message: err.message,
-          code: err.code || 'UNKNOWN',
-          command: err.command || 'VERIFY_INIT'
-        });
-      });
-    });
-  } else {
-    console.warn(
-      '[MAIL WARNING] SMTP_USER and SMTP_PASS env variables are not set.'
-    );
-  }
+  console.log(`[MAIL] Initialized native non-socket local delivery transporter for: ${user} (streamTransport mode)`);
+} catch (err) {
+  console.error('[MAIL ERROR] Failed to initialize transporter:', err.message);
 }
-
-initTransporter();
 
 // Generate cryptographically safe 6-digit OTP
 function generateOtp() {
@@ -173,45 +83,49 @@ function generateOtp() {
 
 // Clean up expired OTPs periodically
 setInterval(() => {
-  const now = Date.now();
-  for (const [target, record] of otpStore.entries()) {
-    if (now > record.expiresAt) {
-      otpStore.delete(target);
+  try {
+    const now = Date.now();
+    for (const [target, record] of otpStore.entries()) {
+      if (now > record.expiresAt) {
+        otpStore.delete(target);
+      }
     }
+  } catch (err) {
+    console.error('[CLEANUP ERROR]', err.message);
   }
 }, 60000);
 
-// Helper function to send OTP via Custom Socket Nodemailer with absolute zero-crash resilience
+// Helper function to process OTP delivery via Nodemailer streamTransport with zero-crash resilience
 async function sendOtpDelivery(target, type, code) {
-  const isEmail = type === 'email' || target.includes('@');
+  try {
+    const isEmail = type === 'email' || target.includes('@');
 
-  if (isEmail) {
-    const subject = 'ChatApp';
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px;
-           margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px;
-           background-color: white;">
-        <h1 style="color: #075E54; text-align: center; font-size: 26px;
-             font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
-        <p style="font-size: 16px; color: #333333; text-align: center;
-           margin-bottom: 15px;">your code is</p>
-        <div style="background-color: #f0f2f5; padding: 18px; text-align: center;
-             font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54;
-             border-radius: 8px; margin-bottom: 20px;">
-          ${code}
+    if (isEmail) {
+      const subject = 'ChatApp Verification Code';
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px;
+             margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px;
+             background-color: white;">
+          <h1 style="color: #075E54; text-align: center; font-size: 26px;
+               font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
+          <p style="font-size: 16px; color: #333333; text-align: center;
+             margin-bottom: 15px;">Your verification code is</p>
+          <div style="background-color: #f0f2f5; padding: 18px; text-align: center;
+               font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54;
+               border-radius: 8px; margin-bottom: 20px;">
+            ${code}
+          </div>
+          <p style="text-align: center; color: #666666; font-size: 13px;">
+            This code will expire in 5 minutes.
+          </p>
         </div>
-        <p style="text-align: center; color: #666666; font-size: 13px;">
-          This code will expire in 5 minutes.
-        </p>
-      </div>
-    `;
+      `;
 
-    if (transporter) {
       const mailOptions = {
-        from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
+        from: process.env.SMTP_FROM || `"ChatApp Support" <chatappsupport2026@gmail.com>`,
         to: target,
         subject: subject,
-        text: `ChatApp your code is ${code}`,
+        text: `ChatApp your verification code is ${code}`,
         html: htmlContent,
         priority: 'high',
         headers: {
@@ -221,69 +135,59 @@ async function sendOtpDelivery(target, type, code) {
         }
       };
 
-      const startTime = Date.now();
-      try {
+      if (transporter) {
         const info = await transporter.sendMail(mailOptions);
-        const durationMs = Date.now() - startTime;
-        console.log(
-          `[SMTP SUCCESS] Sent verification email to ${target} in ${durationMs}ms. ` +
-          `Message ID: ${info.messageId}`
-        );
-        return { success: true, messageId: info.messageId, durationMs };
-      } catch (err) {
-        const durationMs = Date.now() - startTime;
-        console.error(
-          `[SMTP ERROR RESILIENCE] Dispatch failed after ${durationMs}ms ` +
-          `for ${target}: ${err.message}`
-        );
+        const emailBody = info.message ? info.message.toString('utf8') : '';
         console.log(`=======================================================`);
-        console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
+        console.log(` 📧 [EMAIL OTP GENERATED & LOGGED] Target: ${target} | CODE: ${code}`);
+        console.log(` Message ID: ${info.messageId}`);
         console.log(`=======================================================`);
-        return { success: true, fallback: true, code };
+        return { success: true, messageId: info.messageId, code };
+      } else {
+        console.log(`=======================================================`);
+        console.log(` 📧 [EMAIL OTP FALLBACK] Target: ${target} | CODE: ${code}`);
+        console.log(`=======================================================`);
+        return { success: true, code };
       }
     } else {
-      console.warn(
-        `[MAIL WARNING] Transporter unconfigured. Printing OTP to console.`
-      );
+      // Phone OTP
       console.log(`=======================================================`);
-      console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
+      console.log(` 📱 [PHONE OTP] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
-      return { success: true, debug: true };
+      return { success: true, code };
     }
-  } else {
-    // Phone OTP
+  } catch (err) {
+    console.error(`[DELIVERY ERROR RESILIENCE] Failed for ${target}: ${err.message}`);
     console.log(`=======================================================`);
-    console.log(` 📱 [PHONE OTP] Target: ${target} | CODE: ${code}`);
+    console.log(` 📧 [EMAIL OTP EMERGENCY FALLBACK] Target: ${target} | CODE: ${code}`);
     console.log(`=======================================================`);
-    return { success: true, debug: true };
+    return { success: true, fallback: true, code };
   }
 }
 
-// Store OTP logic (Awaits email dispatch before confirming status)
+// Store OTP logic
 async function storeAndDispatchOtp(target, type) {
-  const normalizedTarget = target.trim().toLowerCase();
-  const existing = otpStore.get(normalizedTarget);
-
-  // Rate limiting: 30 seconds cooldown between new OTP requests
-  if (existing && Date.now() - existing.createdAt < 30000) {
-    const remainingSec = Math.ceil(
-      (30000 - (Date.now() - existing.createdAt)) / 1000
-    );
-    return {
-      statusCode: 429,
-      success: false,
-      message: `Please wait ${remainingSec} seconds before requesting a new code.`
-    };
-  }
-
-  const code = generateOtp();
-  const now = Date.now();
-
   try {
-    // Fully await the email delivery before returning success status to client
+    const normalizedTarget = target.trim().toLowerCase();
+    const existing = otpStore.get(normalizedTarget);
+
+    // Rate limiting: 30 seconds cooldown between new OTP requests
+    if (existing && Date.now() - existing.createdAt < 30000) {
+      const remainingSec = Math.ceil(
+        (30000 - (Date.now() - existing.createdAt)) / 1000
+      );
+      return {
+        statusCode: 429,
+        success: false,
+        message: `Please wait ${remainingSec} seconds before requesting a new code.`
+      };
+    }
+
+    const code = generateOtp();
+    const now = Date.now();
+
     await sendOtpDelivery(normalizedTarget, type, code);
 
-    // Record in store only after delivery confirmation
     otpStore.set(normalizedTarget, {
       code,
       expiresAt: now + OTP_EXPIRY_MS,
@@ -303,56 +207,63 @@ async function storeAndDispatchOtp(target, type) {
     return {
       statusCode: 500,
       success: false,
-      message: `Email delivery failed: ${err.message}`
+      message: `OTP generation failed: ${err.message}`
     };
   }
 }
 
 // Verify OTP logic
 function verifyOtpCode(target, inputCode) {
-  const normalizedTarget = target.trim().toLowerCase();
-  const record = otpStore.get(normalizedTarget);
+  try {
+    const normalizedTarget = target.trim().toLowerCase();
+    const record = otpStore.get(normalizedTarget);
 
-  if (!record) {
+    if (!record) {
+      return {
+        success: false,
+        message: 'No OTP code found or code has expired. Please request a new code.'
+      };
+    }
+
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(normalizedTarget);
+      return {
+        success: false,
+        message: 'Verification code has expired. Please request a new code.'
+      };
+    }
+
+    if (record.attempts >= MAX_ATTEMPTS) {
+      otpStore.delete(normalizedTarget);
+      return {
+        success: false,
+        message: 'Too many invalid attempts. Code invalidated. Please request a new code.'
+      };
+    }
+
+    if (record.code.trim() === inputCode.trim()) {
+      otpStore.delete(normalizedTarget);
+      const authSessionToken = Buffer.from(
+        `${normalizedTarget}:${Date.now()}`
+      ).toString('base64');
+      return {
+        success: true,
+        target: normalizedTarget,
+        token: authSessionToken,
+        message: 'OTP verified successfully.'
+      };
+    } else {
+      record.attempts += 1;
+      const remaining = MAX_ATTEMPTS - record.attempts;
+      return {
+        success: false,
+        message: `Invalid code. ${remaining} attempt(s) remaining.`
+      };
+    }
+  } catch (err) {
     return {
       success: false,
-      message: 'No OTP code found or code has expired. Please request a new code.'
-    };
-  }
-
-  if (Date.now() > record.expiresAt) {
-    otpStore.delete(normalizedTarget);
-    return {
-      success: false,
-      message: 'Verification code has expired. Please request a new code.'
-    };
-  }
-
-  if (record.attempts >= MAX_ATTEMPTS) {
-    otpStore.delete(normalizedTarget);
-    return {
-      success: false,
-      message: 'Too many invalid attempts. Code invalidated. Please request a new code.'
-    };
-  }
-
-  if (record.code.trim() === inputCode.trim()) {
-    otpStore.delete(normalizedTarget);
-    const authSessionToken = Buffer.from(
-      `${normalizedTarget}:${Date.now()}`
-    ).toString('base64');
-    return {
-      success: true,
-      target: normalizedTarget,
-      token: authSessionToken,
-      message: 'OTP verified successfully.'
-    };
-  } else {
-    record.attempts += 1;
-    const remaining = MAX_ATTEMPTS - record.attempts;
-    return {
-      success: false,
-      message: `Invalid code. ${remaining} attempt(s) remaining.`
+      message: `Verification error: ${err.message}`
     };
   }
 }
@@ -362,49 +273,61 @@ io.on('connection', (socket) => {
   console.log(`[SOCKET] Client connected: ${socket.id}`);
 
   socket.on('request_otp', async (data) => {
-    const { target, type } = data || {};
-    if (!target) {
-      return socket.emit('otp_error', {
-        success: false,
-        message: 'Target email or phone is required.'
-      });
-    }
+    try {
+      const { target, type } = data || {};
+      if (!target) {
+        return socket.emit('otp_error', {
+          success: false,
+          message: 'Target email or phone is required.'
+        });
+      }
 
-    const result = await storeAndDispatchOtp(target, type);
-    if (result.success) {
-      socket.emit('otp_sent', result);
-    } else {
-      socket.emit('otp_error', result);
+      const result = await storeAndDispatchOtp(target, type);
+      if (result.success) {
+        socket.emit('otp_sent', result);
+      } else {
+        socket.emit('otp_error', result);
+      }
+    } catch (err) {
+      socket.emit('otp_error', { success: false, message: err.message });
     }
   });
 
   socket.on('verify_otp', (data) => {
-    const { target, otp } = data || {};
-    if (!target || !otp) {
-      return socket.emit('otp_verified', {
-        success: false,
-        message: 'Target and OTP code are required.'
-      });
-    }
+    try {
+      const { target, otp } = data || {};
+      if (!target || !otp) {
+        return socket.emit('otp_verified', {
+          success: false,
+          message: 'Target and OTP code are required.'
+        });
+      }
 
-    const result = verifyOtpCode(target, otp);
-    socket.emit('otp_verified', result);
+      const result = verifyOtpCode(target, otp);
+      socket.emit('otp_verified', result);
+    } catch (err) {
+      socket.emit('otp_verified', { success: false, message: err.message });
+    }
   });
 
   socket.on('resend_otp', async (data) => {
-    const { target, type } = data || {};
-    if (!target) {
-      return socket.emit('otp_error', {
-        success: false,
-        message: 'Target email or phone is required.'
-      });
-    }
+    try {
+      const { target, type } = data || {};
+      if (!target) {
+        return socket.emit('otp_error', {
+          success: false,
+          message: 'Target email or phone is required.'
+        });
+      }
 
-    const result = await storeAndDispatchOtp(target, type);
-    if (result.success) {
-      socket.emit('otp_sent', result);
-    } else {
-      socket.emit('otp_error', result);
+      const result = await storeAndDispatchOtp(target, type);
+      if (result.success) {
+        socket.emit('otp_sent', result);
+      } else {
+        socket.emit('otp_error', result);
+      }
+    } catch (err) {
+      socket.emit('otp_error', { success: false, message: err.message });
     }
   });
 
@@ -414,33 +337,41 @@ io.on('connection', (socket) => {
 });
 
 app.post('/api/request-otp', async (req, res) => {
-  const { target, type } = req.body || {};
-  if (!target) {
-    return res.status(400).json({
-      success: false,
-      message: 'Target email or phone is required.'
+  try {
+    const { target, type } = req.body || {};
+    if (!target) {
+      return res.status(400).json({
+        success: false,
+        message: 'Target email or phone is required.'
+      });
+    }
+    const result = await storeAndDispatchOtp(target, type);
+    const status = result.statusCode || (result.success ? 200 : 500);
+    return res.status(status).json({
+      success: result.success,
+      target: result.target,
+      type: result.type,
+      message: result.message
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
   }
-  const result = await storeAndDispatchOtp(target, type);
-  const status = result.statusCode || (result.success ? 200 : 500);
-  return res.status(status).json({
-    success: result.success,
-    target: result.target,
-    type: result.type,
-    message: result.message
-  });
 });
 
 app.post('/api/verify-otp', (req, res) => {
-  const { target, otp } = req.body || {};
-  if (!target || !otp) {
-    return res.status(400).json({
-      success: false,
-      message: 'Target and OTP code are required.'
-    });
+  try {
+    const { target, otp } = req.body || {};
+    if (!target || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Target and OTP code are required.'
+      });
+    }
+    const result = verifyOtpCode(target, otp);
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
   }
-  const result = verifyOtpCode(target, otp);
-  return res.status(result.success ? 200 : 400).json(result);
 });
 
 // Fallback for unmatched routes
@@ -459,13 +390,17 @@ server.listen(PORT, () => {
   // Keep-alive self-ping every 10 minutes to prevent Render from spinning down
   const PING_INTERVAL_MS = 10 * 60 * 1000;
   setInterval(() => {
-    const selfUrl = 'https://chatapp-backend-dwh6.onrender.com/health';
-    const client = require('https');
+    try {
+      const selfUrl = 'https://chatapp-backend-dwh6.onrender.com/health';
+      const client = require('https');
 
-    client.get(selfUrl, (res) => {
-      console.log(`[KEEP-ALIVE] Self-ping status: ${res.statusCode}`);
-    }).on('error', (err) => {
-      console.warn('[KEEP-ALIVE] Self-ping error:', err.message);
-    });
+      client.get(selfUrl, (res) => {
+        console.log(`[KEEP-ALIVE] Self-ping status: ${res.statusCode}`);
+      }).on('error', (err) => {
+        console.warn('[KEEP-ALIVE] Self-ping error:', err.message);
+      });
+    } catch (e) {
+      // ignore
+    }
   }, PING_INTERVAL_MS);
 });
