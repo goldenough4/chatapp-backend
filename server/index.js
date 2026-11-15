@@ -57,7 +57,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Direct Non-Pooled SMTP Transporter over Port 587 STARTTLS)
+// Transporter setup (Direct Non-Pooled SMTP Transporter with strict 5s socket timeouts)
 let transporter = null;
 
 function initTransporter() {
@@ -79,10 +79,11 @@ function initTransporter() {
       port: port,
       secure: secure,
       requireTLS: !secure, // Enable STARTTLS over port 587
-      family: 4, // Enforce IPv4 socket creation to eliminate timeouts
-      connectionTimeout: 30000, // 30s connection establishment timeout
-      greetingTimeout: 30000,   // 30s greeting timeout
-      socketTimeout: 30000,     // 30s socket inactivity timeout
+      pool: false, // Enforce direct, non-pooled TCP socket per message
+      family: 4, // Enforce IPv4 socket creation
+      connectionTimeout: 5000, // 5s connection establishment timeout (never hangs for 30s)
+      greetingTimeout: 5000,   // 5s greeting timeout
+      socketTimeout: 5000,     // 5s socket inactivity timeout
       auth: {
         user: user,
         pass: pass
@@ -92,22 +93,21 @@ function initTransporter() {
       }
     });
 
-    transporter.verify((error) => {
-      if (error) {
-        console.error(
-          '[MAIL VERIFY ERROR] Transporter connection check failed:',
+    // Non-blocking background verification check
+    setImmediate(() => {
+      transporter.verify().then(() => {
+        console.log(`[MAIL VERIFY SUCCESS] SMTP transporter ready for: ${user}`);
+      }).catch((error) => {
+        console.warn(
+          '[MAIL VERIFY WARNING] Background verification check failed:',
           error.message
         );
-      } else {
-        console.log(
-          `[MAIL VERIFY SUCCESS] SMTP transporter ready for: ${user}`
-        );
-      }
+      });
     });
 
     console.log(
-      `[MAIL] Initialized SMTP transporter for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4)`
+      `[MAIL] Initialized direct SMTP transporter for: ${user} ` +
+      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=5s)`
     );
   } else {
     console.warn(
@@ -173,7 +173,7 @@ async function sendOtpDelivery(target, type, code) {
         );
       } catch (err) {
         console.error(
-          `[SMTP ERROR] Failed for ${target}:`,
+          `[SMTP ERROR] Direct socket delivery failed for ${target}:`,
           err.message
         );
         console.log(`=======================================================`);
