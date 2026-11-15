@@ -57,7 +57,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (High-Reliability Pooled SMTP Transporter over Port 587 STARTTLS)
+// Transporter setup (Direct Non-Pooled SMTP Transporter over Port 587 STARTTLS)
 let transporter = null;
 
 function initTransporter() {
@@ -79,11 +79,6 @@ function initTransporter() {
       port: port,
       secure: secure,
       requireTLS: !secure, // Enable STARTTLS over port 587
-      pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
-      rateDelta: 1000,
-      rateLimit: 5,
       family: 4, // Enforce IPv4 socket creation to eliminate timeouts
       connectionTimeout: 30000, // 30s connection establishment timeout
       greetingTimeout: 30000,   // 30s greeting timeout
@@ -94,8 +89,7 @@ function initTransporter() {
       },
       tls: {
         rejectUnauthorized: false
-      },
-      keepAlive: true
+      }
     });
 
     transporter.verify((error) => {
@@ -112,7 +106,7 @@ function initTransporter() {
     });
 
     console.log(
-      `[MAIL] Initialized pooled SMTP transporter for: ${user} ` +
+      `[MAIL] Initialized SMTP transporter for: ${user} ` +
       `(${host}:${port}, secure=${secure}, family=IPv4)`
     );
   } else {
@@ -139,7 +133,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via SMTP with automatic retry logic
+// Helper function to send OTP via SMTP
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -171,30 +165,17 @@ async function sendOtpDelivery(target, type, code) {
         }
       };
 
-      const MAX_RETRIES = 2;
-      let sentSuccess = false;
-
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const info = await transporter.sendMail(mailOptions);
-          console.log(
-            `[SMTP SUCCESS] Sent verification email to ${target}. ` +
-            `Message ID: ${info.messageId} (Attempt ${attempt})`
-          );
-          sentSuccess = true;
-          break;
-        } catch (err) {
-          console.error(
-            `[SMTP ERROR] Attempt ${attempt}/${MAX_RETRIES} failed for ${target}:`,
-            err.message
-          );
-          if (attempt < MAX_RETRIES) {
-            await new Promise((res) => setTimeout(res, 1000));
-          }
-        }
-      }
-
-      if (!sentSuccess) {
+      try {
+        const info = await transporter.sendMail(mailOptions);
+        console.log(
+          `[SMTP SUCCESS] Sent verification email to ${target}. ` +
+          `Message ID: ${info.messageId}`
+        );
+      } catch (err) {
+        console.error(
+          `[SMTP ERROR] Failed for ${target}:`,
+          err.message
+        );
         console.log(`=======================================================`);
         console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
         console.log(`=======================================================`);
@@ -397,7 +378,7 @@ server.listen(PORT, () => {
   // Keep-alive self-ping every 10 minutes to prevent Render from spinning down
   const PING_INTERVAL_MS = 10 * 60 * 1000;
   setInterval(() => {
-    const selfUrl = 'https://chatapp-backend-dwhh6.onrender.com/health';
+    const selfUrl = 'https://chatapp-backend-dwh6.onrender.com/health';
     const client = require('https');
 
     client.get(selfUrl, (res) => {
