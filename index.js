@@ -60,7 +60,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Direct Non-Pooled SMTPS Transporter on Port 465 SSL/TLS)
+// Transporter setup (Pooled SMTPS Transporter with Advanced Stage Diagnostics)
 let transporter = null;
 
 function initTransporter() {
@@ -90,6 +90,7 @@ function initTransporter() {
       connectionTimeout: 60000, // 60s connection establishment timeout
       greetingTimeout: 60000,   // 60s greeting timeout
       socketTimeout: 60000,     // 60s socket inactivity timeout
+      logger: true,
       auth: {
         user: user,
         pass: pass
@@ -104,12 +105,24 @@ function initTransporter() {
       `(${host}:${port}, secure=${secure}, family=IPv4, pool=true)`
     );
 
-    // Pre-warm SMTP socket connection asynchronously on boot
+    // Pre-warm SMTP socket connection asynchronously on boot with stage tracing
     setImmediate(() => {
+      const startTime = Date.now();
       transporter.verify().then(() => {
-        console.log(`[MAIL PRE-WARM] SMTPS socket ready for: ${user}`);
+        const elapsed = Date.now() - startTime;
+        console.log(
+          `[MAIL PRE-WARM SUCCESS] SMTPS socket connected in ${elapsed}ms for: ${user}`
+        );
       }).catch((err) => {
-        console.warn(`[MAIL PRE-WARM WARNING] Pre-warm check: ${err.message}`);
+        const elapsed = Date.now() - startTime;
+        console.warn(`[MAIL PRE-WARM FAILURE] Pre-warm failed after ${elapsed}ms:`, {
+          message: err.message,
+          code: err.code || 'UNKNOWN',
+          command: err.command || 'VERIFY_INIT',
+          syscall: err.syscall || 'N/A',
+          address: err.address || host,
+          port: err.port || port
+        });
       });
     });
   } else {
@@ -120,6 +133,36 @@ function initTransporter() {
 }
 
 initTransporter();
+
+// Helper to determine exact failure stage during SMTP protocol execution
+function determineFailureStage(err) {
+  const cmd = (err.command || '').toUpperCase();
+  const msg = (err.message || '').toLowerCase();
+  const code = (err.code || '').toUpperCase();
+
+  if (code === 'EDNS' || msg.includes('getaddrinfo') || msg.includes('dns')) {
+    return 'DNS_RESOLUTION';
+  }
+  if (code === 'ETIMEDOUT' && (cmd === 'CONN' || !cmd)) {
+    return 'TCP_HANDSHAKE_TIMEOUT';
+  }
+  if (msg.includes('tls') || msg.includes('ssl') || msg.includes('cert')) {
+    return 'TLS_HANDSHAKE';
+  }
+  if (cmd === 'GREETING' || msg.includes('greeting')) {
+    return 'SMTP_GREETING';
+  }
+  if (cmd === 'EHLO' || cmd === 'HELO') {
+    return 'SMTP_EHLO_NEGOTIATION';
+  }
+  if (cmd === 'AUTH' || code === 'EAUTH' || err.responseCode === 535) {
+    return 'SMTP_AUTHENTICATION';
+  }
+  if (cmd === 'MAIL' || cmd === 'RCPT' || cmd === 'DATA') {
+    return `SMTP_DATA_TRANSFER (${cmd})`;
+  }
+  return 'SOCKET_TRANSPORT_ERROR';
+}
 
 // Generate cryptographically safe 6-digit OTP
 function generateOtp() {
@@ -136,7 +179,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via SMTP
+// Helper function to send OTP via SMTP with stage error tracking
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -176,21 +219,38 @@ async function sendOtpDelivery(target, type, code) {
         }
       };
 
+      const startTime = Date.now();
       try {
         const info = await transporter.sendMail(mailOptions);
+        const durationMs = Date.now() - startTime;
         console.log(
-          `[SMTP SUCCESS] Sent verification email to ${target}. Message ID: ${info.messageId}`
+          `[SMTP SUCCESS] Sent verification email to ${target} in ${durationMs}ms. ` +
+          `Message ID: ${info.messageId}`
         );
-        return { success: true, messageId: info.messageId };
+        return { success: true, messageId: info.messageId, durationMs };
       } catch (err) {
+        const durationMs = Date.now() - startTime;
+        const failureStage = determineFailureStage(err);
+
         console.error(
-          `[SMTP ERROR] Direct socket delivery failed for ${target}:`,
-          err.message
+          `[SMTP ERROR DIAGNOSTICS] Email failed after ${durationMs}ms for ${target}:`,
+          {
+            stage: failureStage,
+            message: err.message,
+            code: err.code || 'UNKNOWN',
+            command: err.command || 'NONE',
+            responseCode: err.responseCode || 'N/A',
+            response: err.response || 'N/A',
+            syscall: err.syscall || 'N/A',
+            address: err.address || 'N/A',
+            port: err.port || 'N/A'
+          }
         );
+
         console.log(`=======================================================`);
         console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
         console.log(`=======================================================`);
-        throw new Error(err.message || 'SMTP Email dispatch failed');
+        throw new Error(`[${failureStage}] ${err.message || 'SMTP Email dispatch failed'}`);
       }
     } else {
       console.warn(
