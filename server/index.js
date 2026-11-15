@@ -57,7 +57,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Direct Non-Pooled SMTP Transporter with 30s timeouts)
+// Transporter setup (Direct Non-Pooled SMTP Transporter with 60s timeouts)
 let transporter = null;
 
 function initTransporter() {
@@ -81,9 +81,9 @@ function initTransporter() {
       requireTLS: !secure, // Enable STARTTLS over port 587
       pool: false, // Enforce direct, non-pooled TCP socket per message
       family: 4, // Enforce IPv4 socket creation
-      connectionTimeout: 30000, // 30s connection establishment timeout
-      greetingTimeout: 30000,   // 30s greeting timeout
-      socketTimeout: 30000,     // 30s socket inactivity timeout
+      connectionTimeout: 60000, // 60s connection establishment timeout
+      greetingTimeout: 60000,   // 60s greeting timeout
+      socketTimeout: 60000,     // 60s socket inactivity timeout
       auth: {
         user: user,
         pass: pass
@@ -95,7 +95,7 @@ function initTransporter() {
 
     console.log(
       `[MAIL] Initialized direct SMTP transporter for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=30s)`
+      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=60s)`
     );
   } else {
     console.warn(
