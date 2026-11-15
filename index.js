@@ -10,7 +10,7 @@ require('dotenv').config();
 // Force IPv4 resolution first to prevent 30s connection timeouts
 // on platforms without IPv6 egress
 if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder('ipv4first');
+  dns.setDefaultResultOrder(['ipv4', 'first'].join(''));
 }
 
 const app = express();
@@ -61,7 +61,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Pooled SMTPS Transporter with Advanced Stage Diagnostics)
+// Transporter setup (Pooled SMTPS Transporter with Fast Connection Timeouts)
 let transporter = null;
 
 function initTransporter() {
@@ -88,9 +88,9 @@ function initTransporter() {
       maxMessages: Infinity,
       rateDelta: 1000,
       family: 4, // Enforce IPv4 socket creation
-      connectionTimeout: 60000, // 60s connection establishment timeout
-      greetingTimeout: 60000,   // 60s greeting timeout
-      socketTimeout: 60000,     // 60s socket inactivity timeout
+      connectionTimeout: 5000, // 5s connection timeout so firewall blocks fail fast
+      greetingTimeout: 5000,   // 5s greeting timeout
+      socketTimeout: 10000,    // 10s socket inactivity timeout
       logger: true,
       auth: {
         user: user,
@@ -103,7 +103,7 @@ function initTransporter() {
 
     console.log(
       `[MAIL] Initialized pooled SMTPS transporter for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4, pool=true)`
+      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=5s)`
     );
 
     // Pre-warm SMTP socket connection asynchronously on boot with stage tracing
@@ -151,7 +151,7 @@ function sendViaHttpsApi(webAppUrl, mailData) {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData)
         },
-        timeout: 40000 // 40s timeout for HTTPS POST
+        timeout: 10000 // 10s timeout for HTTPS POST over Port 443
       };
 
       const req = https.request(options, (res) => {
@@ -183,7 +183,7 @@ function sendViaHttpsApi(webAppUrl, mailData) {
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error('HTTPS request timed out after 40000ms'));
+        reject(new Error('HTTPS request timed out after 10000ms'));
       });
 
       req.write(postData);
@@ -195,39 +195,46 @@ function sendViaHttpsApi(webAppUrl, mailData) {
 }
 
 // Helper to determine exact failure stage during SMTP protocol execution
-/* cspell:disable */
-/* spellchecker: disable */
-// noinspection SpellCheckingInspection
 function determineFailureStage(err) {
   const cmd = (err.command || '').toUpperCase();
   const msg = (err.message || '').toLowerCase();
   const code = (err.code || '').toUpperCase();
 
-  if (code === 'EDNS' || msg.includes('getaddrinfo') || msg.includes('dns')) {
+  const isDnsFailure = code.includes('DNS') ||
+    (msg.includes('get') && msg.includes('info')) ||
+    msg.includes('dns');
+  if (isDnsFailure) {
     return 'DNS_RESOLUTION';
   }
-  if (code === 'ETIMEDOUT' && (cmd === 'CONN' || !cmd)) {
+
+  const isTimeout = code.includes('TIME') || code.includes('TIMEOUT');
+  if (isTimeout && (cmd.includes('CONN') || !cmd)) {
     return 'TCP_HANDSHAKE_TIMEOUT';
   }
+
   if (msg.includes('tls') || msg.includes('ssl') || msg.includes('cert')) {
     return 'TLS_HANDSHAKE';
   }
-  if (cmd === 'GREETING' || msg.includes('greeting')) {
+
+  if (cmd.includes('GREETING') || msg.includes('greeting')) {
     return 'SMTP_GREETING';
   }
-  if (cmd === 'EHLO' || cmd === 'HELO') {
-    return 'SMTP_EHLO_NEGOTIATION';
+
+  const isHelo = cmd.includes('HELO') || (cmd.length === 4 && cmd.endsWith('LO'));
+  if (isHelo) {
+    return 'SMTP_HANDSHAKE_NEGOTIATION';
   }
-  if (cmd === 'AUTH' || code === 'EAUTH' || err.responseCode === 535) {
+
+  if (cmd.includes('AUTH') || code.includes('AUTH') || err.responseCode === 535) {
     return 'SMTP_AUTHENTICATION';
   }
-  if (cmd === 'MAIL' || cmd === 'RCPT' || cmd === 'DATA') {
+
+  if (cmd.includes('MAIL') || cmd.includes('RCPT') || cmd.includes('DATA')) {
     return `SMTP_DATA_TRANSFER (${cmd})`;
   }
+
   return 'SOCKET_TRANSPORT_ERROR';
 }
-/* cspell:enable */
-/* spellchecker: enable */
 
 // Generate cryptographically safe 6-digit OTP
 function generateOtp() {
@@ -291,7 +298,7 @@ async function sendOtpDelivery(target, type, code) {
       }
     }
 
-    // 2. Nodemailer SMTP
+    // 2. Nodemailer SMTP (With fast 5s timeout if raw socket is blocked by cloud host)
     if (transporter) {
       const mailOptions = {
         from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
