@@ -57,7 +57,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Direct Non-Pooled SMTP Transporter with 30s timeouts)
+// Transporter setup (Direct Non-Pooled SMTP Transporter with 60s timeouts)
 let transporter = null;
 
 function initTransporter() {
@@ -95,7 +95,7 @@ function initTransporter() {
 
     console.log(
       `[MAIL] Initialized direct SMTP transporter for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=30s)`
+      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=60s)`
     );
   } else {
     console.warn(
@@ -164,9 +164,9 @@ async function sendOtpDelivery(target, type, code) {
       try {
         const info = await transporter.sendMail(mailOptions);
         console.log(
-          `[SMTP SUCCESS] Sent verification email to ${target}. ` +
-          `Message ID: ${info.messageId}`
+          `[SMTP SUCCESS] Sent verification email to ${target}. Message ID: ${info.messageId}`
         );
+        return { success: true, messageId: info.messageId };
       } catch (err) {
         console.error(
           `[SMTP ERROR] Direct socket delivery failed for ${target}:`,
@@ -175,6 +175,7 @@ async function sendOtpDelivery(target, type, code) {
         console.log(`=======================================================`);
         console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
         console.log(`=======================================================`);
+        throw new Error(err.message || 'SMTP Email dispatch failed');
       }
     } else {
       console.warn(
@@ -183,17 +184,19 @@ async function sendOtpDelivery(target, type, code) {
       console.log(`=======================================================`);
       console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
+      return { success: true, debug: true };
     }
   } else {
     // Phone OTP
     console.log(`=======================================================`);
     console.log(` 📱 [PHONE OTP] Target: ${target} | CODE: ${code}`);
     console.log(`=======================================================`);
+    return { success: true, debug: true };
   }
 }
 
-// Store OTP logic
-function storeAndDispatchOtp(target, type) {
+// Store OTP logic (Awaits email dispatch before confirming status)
+async function storeAndDispatchOtp(target, type) {
   const normalizedTarget = target.trim().toLowerCase();
   const existing = otpStore.get(normalizedTarget);
 
@@ -203,6 +206,7 @@ function storeAndDispatchOtp(target, type) {
       (30000 - (Date.now() - existing.createdAt)) / 1000
     );
     return {
+      statusCode: 429,
       success: false,
       message: `Please wait ${remainingSec} seconds before requesting a new code.`
     };
@@ -210,23 +214,34 @@ function storeAndDispatchOtp(target, type) {
 
   const code = generateOtp();
   const now = Date.now();
-  otpStore.set(normalizedTarget, {
-    code,
-    expiresAt: now + OTP_EXPIRY_MS,
-    createdAt: now,
-    attempts: 0,
-    type: type || (normalizedTarget.includes('@') ? 'email' : 'phone')
-  });
 
-  // Asynchronous delivery
-  sendOtpDelivery(normalizedTarget, type, code);
+  try {
+    // Fully await the SMTP email delivery before returning success status to client
+    await sendOtpDelivery(normalizedTarget, type, code);
 
-  return {
-    success: true,
-    target: normalizedTarget,
-    type,
-    message: `Verification code sent to ${normalizedTarget}`
-  };
+    // Record in store only after successful delivery confirmation
+    otpStore.set(normalizedTarget, {
+      code,
+      expiresAt: now + OTP_EXPIRY_MS,
+      createdAt: now,
+      attempts: 0,
+      type: type || (normalizedTarget.includes('@') ? 'email' : 'phone')
+    });
+
+    return {
+      statusCode: 200,
+      success: true,
+      target: normalizedTarget,
+      type,
+      message: `Verification code sent to ${normalizedTarget}`
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      success: false,
+      message: `Email delivery failed: ${err.message}`
+    };
+  }
 }
 
 // Verify OTP logic
@@ -282,7 +297,7 @@ function verifyOtpCode(target, inputCode) {
 io.on('connection', (socket) => {
   console.log(`[SOCKET] Client connected: ${socket.id}`);
 
-  socket.on('request_otp', (data) => {
+  socket.on('request_otp', async (data) => {
     const { target, type } = data || {};
     if (!target) {
       return socket.emit('otp_error', {
@@ -291,7 +306,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    const result = storeAndDispatchOtp(target, type);
+    const result = await storeAndDispatchOtp(target, type);
     if (result.success) {
       socket.emit('otp_sent', result);
     } else {
@@ -312,7 +327,7 @@ io.on('connection', (socket) => {
     socket.emit('otp_verified', result);
   });
 
-  socket.on('resend_otp', (data) => {
+  socket.on('resend_otp', async (data) => {
     const { target, type } = data || {};
     if (!target) {
       return socket.emit('otp_error', {
@@ -321,7 +336,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    const result = storeAndDispatchOtp(target, type);
+    const result = await storeAndDispatchOtp(target, type);
     if (result.success) {
       socket.emit('otp_sent', result);
     } else {
@@ -334,7 +349,7 @@ io.on('connection', (socket) => {
   });
 });
 
-app.post('/api/request-otp', (req, res) => {
+app.post('/api/request-otp', async (req, res) => {
   const { target, type } = req.body || {};
   if (!target) {
     return res.status(400).json({
@@ -342,8 +357,14 @@ app.post('/api/request-otp', (req, res) => {
       message: 'Target email or phone is required.'
     });
   }
-  const result = storeAndDispatchOtp(target, type);
-  return res.status(result.success ? 200 : 429).json(result);
+  const result = await storeAndDispatchOtp(target, type);
+  const status = result.statusCode || (result.success ? 200 : 500);
+  return res.status(status).json({
+    success: result.success,
+    target: result.target,
+    type: result.type,
+    message: result.message
+  });
 });
 
 app.post('/api/verify-otp', (req, res) => {
