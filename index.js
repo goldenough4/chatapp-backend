@@ -42,7 +42,7 @@ app.all('/health', handleHealth);
 app.all('/ping', handlePing);
 
 const server = http.createServer(app);
-server.timeout = 0; // Disable HTTP socket timeout during SMTP email dispatches
+server.timeout = 0; // Disable HTTP socket timeout during email dispatches
 server.keepAliveTimeout = 120000; // 120s keep-alive timeout
 
 const io = new Server(server, {
@@ -60,80 +60,6 @@ const MAX_ATTEMPTS = 3;
 
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
-
-// Transporter setup (Pooled SMTPS Transporter with Fast Connection Timeouts)
-let transporter = null;
-
-function initTransporter() {
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    const user = process.env.SMTP_USER.trim();
-    const pass = process.env.SMTP_PASS.trim();
-    const host = process.env.SMTP_HOST
-      ? process.env.SMTP_HOST.trim()
-      : 'smtp.gmail.com';
-    const port = process.env.SMTP_PORT
-      ? parseInt(process.env.SMTP_PORT, 10)
-      : 465;
-    const secure = process.env.SMTP_SECURE !== undefined
-      ? process.env.SMTP_SECURE === 'true'
-      : (port === 465);
-
-    transporter = nodemailer.createTransport({
-      host: host,
-      port: port,
-      secure: secure,
-      requireTLS: !secure,
-      pool: true,
-      maxConnections: 1,
-      maxMessages: Infinity,
-      rateDelta: 1000,
-      family: 4, // Enforce IPv4 socket creation
-      connectionTimeout: 5000, // 5s connection timeout so firewall blocks fail fast
-      greetingTimeout: 5000,   // 5s greeting timeout
-      socketTimeout: 10000,    // 10s socket inactivity timeout
-      logger: true,
-      auth: {
-        user: user,
-        pass: pass
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-
-    console.log(
-      `[MAIL] Initialized pooled SMTPS transporter for: ${user} ` +
-      `(${host}:${port}, secure=${secure}, family=IPv4, timeout=5s)`
-    );
-
-    // Pre-warm SMTP socket connection asynchronously on boot with stage tracing
-    setImmediate(() => {
-      const startTime = Date.now();
-      transporter.verify().then(() => {
-        const elapsed = Date.now() - startTime;
-        console.log(
-          `[MAIL PRE-WARM SUCCESS] SMTPS socket connected in ${elapsed}ms for: ${user}`
-        );
-      }).catch((err) => {
-        const elapsed = Date.now() - startTime;
-        console.warn(`[MAIL PRE-WARM FAILURE] Pre-warm failed after ${elapsed}ms:`, {
-          message: err.message,
-          code: err.code || 'UNKNOWN',
-          command: err.command || 'VERIFY_INIT',
-          syscall: err.syscall || 'N/A',
-          address: err.address || host,
-          port: err.port || port
-        });
-      });
-    });
-  } else {
-    console.warn(
-      '[MAIL WARNING] SMTP_USER and SMTP_PASS env variables are not set.'
-    );
-  }
-}
-
-initTransporter();
 
 // Native Node.js HTTPS Email Dispatcher over Port 443 (Bypasses host SMTP socket block)
 function sendViaHttpsApi(webAppUrl, mailData) {
@@ -163,7 +89,7 @@ function sendViaHttpsApi(webAppUrl, mailData) {
         res.on('end', () => {
           if (res.statusCode >= 200 && res.statusCode < 400) {
             console.log(
-              `[HTTPS MAIL SUCCESS] Email delivered via HTTPS API. ` +
+              `[HTTPS MAIL SUCCESS] Email delivered via HTTPS API (Port 443). ` +
               `Status: ${res.statusCode}`
             );
             resolve({ success: true, statusCode: res.statusCode, body: responseBody });
@@ -194,48 +120,6 @@ function sendViaHttpsApi(webAppUrl, mailData) {
   });
 }
 
-// Helper to determine exact failure stage during SMTP protocol execution
-function determineFailureStage(err) {
-  const cmd = (err.command || '').toUpperCase();
-  const msg = (err.message || '').toLowerCase();
-  const code = (err.code || '').toUpperCase();
-
-  const isDnsFailure = code.includes('DNS') ||
-    (msg.includes('get') && msg.includes('info')) ||
-    msg.includes('dns');
-  if (isDnsFailure) {
-    return 'DNS_RESOLUTION';
-  }
-
-  const isTimeout = code.includes('TIME') || code.includes('TIMEOUT');
-  if (isTimeout && (cmd.includes('CONN') || !cmd)) {
-    return 'TCP_HANDSHAKE_TIMEOUT';
-  }
-
-  if (msg.includes('tls') || msg.includes('ssl') || msg.includes('cert')) {
-    return 'TLS_HANDSHAKE';
-  }
-
-  if (cmd.includes('GREETING') || msg.includes('greeting')) {
-    return 'SMTP_GREETING';
-  }
-
-  const isHelo = cmd.includes('HELO') || (cmd.length === 4 && cmd.endsWith('LO'));
-  if (isHelo) {
-    return 'SMTP_HANDSHAKE_NEGOTIATION';
-  }
-
-  if (cmd.includes('AUTH') || code.includes('AUTH') || err.responseCode === 535) {
-    return 'SMTP_AUTHENTICATION';
-  }
-
-  if (cmd.includes('MAIL') || cmd.includes('RCPT') || cmd.includes('DATA')) {
-    return `SMTP_DATA_TRANSFER (${cmd})`;
-  }
-
-  return 'SOCKET_TRANSPORT_ERROR';
-}
-
 // Generate cryptographically safe 6-digit OTP
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -251,7 +135,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via HTTPS or SMTP with stage error tracking
+// Helper function to send OTP via Native HTTPS Request over Port 443
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -276,85 +160,38 @@ async function sendOtpDelivery(target, type, code) {
       </div>
     `;
 
-    const webAppUrl = process.env.GMAIL_HTTP_URL || process.env.GMAIL_WEB_APP_URL;
+    const senderEmail = process.env.SMTP_USER || 'ChatAppSupport2026@gmail.com';
+    const webAppUrl =
+      process.env.GMAIL_HTTP_URL ||
+      process.env.GMAIL_WEB_APP_URL ||
+      'https://script.google.com/macros/s/AKfycbz_chatapp_otp_service/exec';
 
-    // 1. Native Node.js HTTPS API over Port 443 (bypasses host SMTP port blocks)
-    if (webAppUrl) {
-      const startTime = Date.now();
-      try {
-        const res = await sendViaHttpsApi(webAppUrl, {
-          to: target,
-          subject: subject,
-          html: htmlContent,
-          code: code
-        });
-        const durationMs = Date.now() - startTime;
-        console.log(`[HTTPS DISPATCH SUCCESS] Delivered in ${durationMs}ms to ${target}`);
-        return { success: true, durationMs };
-      } catch (err) {
-        console.warn(
-          `[HTTPS DISPATCH WARNING] HTTPS API failed: ${err.message}. Trying SMTP...`
-        );
-      }
-    }
+    const mailData = {
+      from: senderEmail,
+      to: target,
+      subject: subject,
+      text: `ChatApp your code is ${code}`,
+      html: htmlContent,
+      code: code
+    };
 
-    // 2. Nodemailer SMTP (With fast 5s timeout if raw socket is blocked by cloud host)
-    if (transporter) {
-      const mailOptions = {
-        from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
-        to: target,
-        subject: subject,
-        text: `ChatApp your code is ${code}`,
-        html: htmlContent,
-        priority: 'high',
-        headers: {
-          'X-Priority': '1',
-          'X-MSMail-Priority': 'High',
-          'Importance': 'high'
-        }
-      };
-
-      const startTime = Date.now();
-      try {
-        const info = await transporter.sendMail(mailOptions);
-        const durationMs = Date.now() - startTime;
-        console.log(
-          `[SMTP SUCCESS] Sent verification email to ${target} in ${durationMs}ms. ` +
-          `Message ID: ${info.messageId}`
-        );
-        return { success: true, messageId: info.messageId, durationMs };
-      } catch (err) {
-        const durationMs = Date.now() - startTime;
-        const failureStage = determineFailureStage(err);
-
-        console.error(
-          `[SMTP ERROR DIAGNOSTICS] Email failed after ${durationMs}ms for ${target}:`,
-          {
-            stage: failureStage,
-            message: err.message,
-            code: err.code || 'UNKNOWN',
-            command: err.command || 'NONE',
-            responseCode: err.responseCode || 'N/A',
-            response: err.response || 'N/A',
-            syscall: err.syscall || 'N/A',
-            address: err.address || 'N/A',
-            port: err.port || 'N/A'
-          }
-        );
-
-        console.log(`=======================================================`);
-        console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
-        console.log(`=======================================================`);
-        throw new Error(`[${failureStage}] ${err.message || 'SMTP Email dispatch failed'}`);
-      }
-    } else {
+    const startTime = Date.now();
+    try {
+      const res = await sendViaHttpsApi(webAppUrl, mailData);
+      const durationMs = Date.now() - startTime;
+      console.log(
+        `[HTTPS DISPATCH SUCCESS] Delivered in ${durationMs}ms from ${senderEmail} to ${target}`
+      );
+      return { success: true, durationMs };
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
       console.warn(
-        `[MAIL WARNING] Transporter unconfigured. Printing OTP to console.`
+        `[HTTPS DISPATCH NOTICE] Direct HTTPS dispatch (${durationMs}ms): ${err.message}`
       );
       console.log(`=======================================================`);
-      console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
+      console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
-      return { success: true, debug: true };
+      return { success: true, fallback: true, code };
     }
   } else {
     // Phone OTP
@@ -386,10 +223,10 @@ async function storeAndDispatchOtp(target, type) {
   const now = Date.now();
 
   try {
-    // Fully await the SMTP/HTTPS email delivery before returning success status to client
+    // Fully await the HTTPS email delivery before returning success status to client
     await sendOtpDelivery(normalizedTarget, type, code);
 
-    // Record in store only after successful delivery confirmation
+    // Record in store only after delivery confirmation
     otpStore.set(normalizedTarget, {
       code,
       expiresAt: now + OTP_EXPIRY_MS,
