@@ -41,6 +41,9 @@ app.all('/health', handleHealth);
 app.all('/ping', handlePing);
 
 const server = http.createServer(app);
+server.timeout = 0; // Disable HTTP socket timeout during SMTP email dispatches
+server.keepAliveTimeout = 120000; // 120s keep-alive timeout
+
 const io = new Server(server, {
   pingInterval: 25000,
   pingTimeout: 20000,

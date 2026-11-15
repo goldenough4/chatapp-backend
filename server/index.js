@@ -41,6 +41,9 @@ app.all('/health', handleHealth);
 app.all('/ping', handlePing);
 
 const server = http.createServer(app);
+server.timeout = 0; // Disable HTTP socket timeout during SMTP email dispatches
+server.keepAliveTimeout = 120000; // 120s keep-alive timeout
+
 const io = new Server(server, {
   pingInterval: 25000,
   pingTimeout: 20000,
@@ -94,7 +97,7 @@ function initTransporter() {
     });
 
     console.log(
-      `[MAIL] Initialized direct SMTPS transporter for: ${user} ` +
+      `[MAIL] Initialized direct SMTP transporter for: ${user} ` +
       `(${host}:${port}, secure=${secure}, family=IPv4, timeout=60s)`
     );
   } else {
@@ -128,13 +131,21 @@ async function sendOtpDelivery(target, type, code) {
   if (isEmail) {
     const subject = 'ChatApp';
     const htmlContent = `
-      <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
-        <h1 style="color: #075E54; text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
-        <p style="font-size: 16px; color: #333333; text-align: center; margin-bottom: 15px;">your code is</p>
-        <div style="background-color: #f0f2f5; padding: 18px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54; border-radius: 8px; margin-bottom: 20px;">
+      <div style="font-family: Arial, sans-serif; padding: 25px; max-width: 500px;
+           margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px;
+           background-color: white;">
+        <h1 style="color: #075E54; text-align: center; font-size: 26px;
+             font-weight: bold; margin-bottom: 20px;">ChatApp</h1>
+        <p style="font-size: 16px; color: #333333; text-align: center;
+           margin-bottom: 15px;">your code is</p>
+        <div style="background-color: #f0f2f5; padding: 18px; text-align: center;
+             font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #075E54;
+             border-radius: 8px; margin-bottom: 20px;">
           ${code}
         </div>
-        <p style="text-align: center; color: #666666; font-size: 13px;">This code will expire in 5 minutes.</p>
+        <p style="text-align: center; color: #666666; font-size: 13px;">
+          This code will expire in 5 minutes.
+        </p>
       </div>
     `;
 
