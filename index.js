@@ -151,7 +151,7 @@ function sendViaHttpsApi(webAppUrl, mailData) {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData)
         },
-        timeout: 10000 // 10s timeout for HTTPS POST
+        timeout: 40000 // 40s timeout for HTTPS POST
       };
 
       const req = https.request(options, (res) => {
@@ -183,7 +183,7 @@ function sendViaHttpsApi(webAppUrl, mailData) {
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error('HTTPS request timed out after 10000ms'));
+        reject(new Error('HTTPS request timed out after 40000ms'));
       });
 
       req.write(postData);
@@ -195,6 +195,7 @@ function sendViaHttpsApi(webAppUrl, mailData) {
 }
 
 // Helper to determine exact failure stage during SMTP protocol execution
+// noinspection SpellCheckingInspection
 function determineFailureStage(err) {
   const cmd = (err.command || '').toUpperCase();
   const msg = (err.message || '').toLowerCase();
