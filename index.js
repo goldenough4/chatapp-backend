@@ -57,7 +57,7 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Transporter setup (Direct Non-Pooled SMTP Transporter with 60s timeouts)
+// Transporter setup (Direct Non-Pooled SMTPS Transporter on Port 465 SSL/TLS)
 let transporter = null;
 
 function initTransporter() {
@@ -69,7 +69,7 @@ function initTransporter() {
       : 'smtp.gmail.com';
     const port = process.env.SMTP_PORT
       ? parseInt(process.env.SMTP_PORT, 10)
-      : 587;
+      : 465;
     const secure = process.env.SMTP_SECURE !== undefined
       ? process.env.SMTP_SECURE === 'true'
       : (port === 465);
@@ -78,7 +78,7 @@ function initTransporter() {
       host: host,
       port: port,
       secure: secure,
-      requireTLS: !secure, // Enable STARTTLS over port 587
+      requireTLS: !secure,
       pool: false, // Enforce direct, non-pooled TCP socket per message
       family: 4, // Enforce IPv4 socket creation
       connectionTimeout: 60000, // 60s connection establishment timeout
@@ -94,7 +94,7 @@ function initTransporter() {
     });
 
     console.log(
-      `[MAIL] Initialized direct SMTP transporter for: ${user} ` +
+      `[MAIL] Initialized direct SMTPS transporter for: ${user} ` +
       `(${host}:${port}, secure=${secure}, family=IPv4, timeout=60s)`
     );
   } else {
