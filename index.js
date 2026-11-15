@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
@@ -134,6 +135,65 @@ function initTransporter() {
 
 initTransporter();
 
+// Native Node.js HTTPS Email Dispatcher over Port 443 (Bypasses host SMTP socket block)
+function sendViaHttpsApi(webAppUrl, mailData) {
+  return new Promise((resolve, reject) => {
+    try {
+      const url = new URL(webAppUrl);
+      const postData = JSON.stringify(mailData);
+
+      const options = {
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        },
+        timeout: 10000 // 10s timeout for HTTPS POST
+      };
+
+      const req = https.request(options, (res) => {
+        let responseBody = '';
+        res.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 400) {
+            console.log(
+              `[HTTPS MAIL SUCCESS] Email delivered via HTTPS API. ` +
+              `Status: ${res.statusCode}`
+            );
+            resolve({ success: true, statusCode: res.statusCode, body: responseBody });
+          } else {
+            reject(
+              new Error(
+                `HTTPS API returned status ${res.statusCode}: ${responseBody}`
+              )
+            );
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        reject(err);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('HTTPS request timed out after 10000ms'));
+      });
+
+      req.write(postData);
+      req.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 // Helper to determine exact failure stage during SMTP protocol execution
 function determineFailureStage(err) {
   const cmd = (err.command || '').toUpperCase();
@@ -179,7 +239,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via SMTP with stage error tracking
+// Helper function to send OTP via HTTPS or SMTP with stage error tracking
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -204,6 +264,29 @@ async function sendOtpDelivery(target, type, code) {
       </div>
     `;
 
+    const webAppUrl = process.env.GMAIL_HTTP_URL || process.env.GMAIL_WEB_APP_URL;
+
+    // 1. Native Node.js HTTPS API over Port 443 (bypasses host SMTP port blocks)
+    if (webAppUrl) {
+      const startTime = Date.now();
+      try {
+        const res = await sendViaHttpsApi(webAppUrl, {
+          to: target,
+          subject: subject,
+          html: htmlContent,
+          code: code
+        });
+        const durationMs = Date.now() - startTime;
+        console.log(`[HTTPS DISPATCH SUCCESS] Delivered in ${durationMs}ms to ${target}`);
+        return { success: true, durationMs };
+      } catch (err) {
+        console.warn(
+          `[HTTPS DISPATCH WARNING] HTTPS API failed: ${err.message}. Trying SMTP...`
+        );
+      }
+    }
+
+    // 2. Nodemailer SMTP
     if (transporter) {
       const mailOptions = {
         from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
@@ -291,7 +374,7 @@ async function storeAndDispatchOtp(target, type) {
   const now = Date.now();
 
   try {
-    // Fully await the SMTP email delivery before returning success status to client
+    // Fully await the SMTP/HTTPS email delivery before returning success status to client
     await sendOtpDelivery(normalizedTarget, type, code);
 
     // Record in store only after successful delivery confirmation
