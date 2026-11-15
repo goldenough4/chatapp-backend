@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
 const https = require('https');
+const tls = require('tls');
+const net = require('net');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
@@ -61,64 +63,108 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Native Node.js HTTPS Email Dispatcher over Port 443 (Bypasses host SMTP socket block)
-function sendViaHttpsApi(webAppUrl, mailData) {
-  return new Promise((resolve, reject) => {
-    try {
-      const url = new URL(webAppUrl);
-      const postData = JSON.stringify(mailData);
+// Transporter setup (Custom Socket Bound SMTPS Transporter with Zero-Crash Resilience)
+let transporter = null;
 
-      const options = {
-        hostname: url.hostname,
-        port: 443,
-        path: url.pathname + url.search,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData)
-        },
-        timeout: 10000 // 10s timeout for HTTPS POST over Port 443
-      };
+function initTransporter() {
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const user = process.env.SMTP_USER.trim();
+    const pass = process.env.SMTP_PASS.trim();
+    const host = process.env.SMTP_HOST
+      ? process.env.SMTP_HOST.trim()
+      : 'smtp.gmail.com';
+    const port = process.env.SMTP_PORT
+      ? parseInt(process.env.SMTP_PORT, 10)
+      : 465;
+    const secure = process.env.SMTP_SECURE !== undefined
+      ? process.env.SMTP_SECURE === 'true'
+      : (port === 465);
 
-      const req = https.request(options, (res) => {
-        let responseBody = '';
-        res.on('data', (chunk) => {
-          responseBody += chunk;
+    transporter = nodemailer.createTransport({
+      host: host,
+      port: port,
+      secure: secure,
+      requireTLS: !secure,
+      pool: true,
+      maxConnections: 1,
+      maxMessages: Infinity,
+      rateDelta: 1000,
+      family: 4, // Enforce IPv4 socket creation
+      connectionTimeout: 15000, // 15s fast connection timeout
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
+      logger: true,
+      auth: {
+        user: user,
+        pass: pass
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      getSocket: (options, callback) => {
+        try {
+          const socket = tls.connect({
+            host: options.host || host,
+            port: options.port || port,
+            servername: options.host || host,
+            family: 4,
+            rejectUnauthorized: false,
+            timeout: 15000
+          });
+
+          socket.once('secureConnect', () => {
+            callback(null, { socket });
+          });
+
+          socket.once('connect', () => {
+            if (!secure) {
+              callback(null, { socket });
+            }
+          });
+
+          socket.once('error', (err) => {
+            callback(err);
+          });
+
+          socket.once('timeout', () => {
+            socket.destroy(new Error('Custom TLS socket connection timed out'));
+          });
+        } catch (err) {
+          callback(err);
+        }
+      }
+    });
+
+    console.log(
+      `[MAIL] Initialized custom socket SMTPS transporter for: ${user} ` +
+      `(${host}:${port}, secure=${secure}, family=IPv4, customSocket=true)`
+    );
+
+    // Pre-warm SMTP socket connection asynchronously on boot with stage tracing
+    setImmediate(() => {
+      const startTime = Date.now();
+      transporter.verify().then(() => {
+        const elapsed = Date.now() - startTime;
+        console.log(
+          `[MAIL PRE-WARM SUCCESS] Custom socket SMTPS connected in ${elapsed}ms for: ${user}`
+        );
+      }).catch((err) => {
+        const elapsed = Date.now() - startTime;
+        console.warn(`[MAIL PRE-WARM WARNING] Pre-warm note after ${elapsed}ms:`, {
+          message: err.message,
+          code: err.code || 'UNKNOWN',
+          command: err.command || 'VERIFY_INIT'
         });
-
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 400) {
-            console.log(
-              `[HTTPS MAIL SUCCESS] Email delivered via HTTPS API (Port 443). ` +
-              `Status: ${res.statusCode}`
-            );
-            resolve({ success: true, statusCode: res.statusCode, body: responseBody });
-          } else {
-            reject(
-              new Error(
-                `HTTPS API returned status ${res.statusCode}: ${responseBody}`
-              )
-            );
-          }
-        });
       });
-
-      req.on('error', (err) => {
-        reject(err);
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('HTTPS request timed out after 10000ms'));
-      });
-
-      req.write(postData);
-      req.end();
-    } catch (err) {
-      reject(err);
-    }
-  });
+    });
+  } else {
+    console.warn(
+      '[MAIL WARNING] SMTP_USER and SMTP_PASS env variables are not set.'
+    );
+  }
 }
+
+initTransporter();
 
 // Generate cryptographically safe 6-digit OTP
 function generateOtp() {
@@ -135,7 +181,7 @@ setInterval(() => {
   }
 }, 60000);
 
-// Helper function to send OTP via Native HTTPS Request over Port 443
+// Helper function to send OTP via Custom Socket Nodemailer with absolute zero-crash resilience
 async function sendOtpDelivery(target, type, code) {
   const isEmail = type === 'email' || target.includes('@');
 
@@ -160,38 +206,49 @@ async function sendOtpDelivery(target, type, code) {
       </div>
     `;
 
-    const senderEmail = process.env.SMTP_USER || 'ChatAppSupport2026@gmail.com';
-    const webAppUrl =
-      process.env.GMAIL_HTTP_URL ||
-      process.env.GMAIL_WEB_APP_URL ||
-      'https://script.google.com/macros/s/AKfycbz_chatapp_otp_service/exec';
+    if (transporter) {
+      const mailOptions = {
+        from: process.env.SMTP_FROM || `"ChatApp" <${process.env.SMTP_USER}>`,
+        to: target,
+        subject: subject,
+        text: `ChatApp your code is ${code}`,
+        html: htmlContent,
+        priority: 'high',
+        headers: {
+          'X-Priority': '1',
+          'X-MSMail-Priority': 'High',
+          'Importance': 'high'
+        }
+      };
 
-    const mailData = {
-      from: senderEmail,
-      to: target,
-      subject: subject,
-      text: `ChatApp your code is ${code}`,
-      html: htmlContent,
-      code: code
-    };
-
-    const startTime = Date.now();
-    try {
-      const res = await sendViaHttpsApi(webAppUrl, mailData);
-      const durationMs = Date.now() - startTime;
-      console.log(
-        `[HTTPS DISPATCH SUCCESS] Delivered in ${durationMs}ms from ${senderEmail} to ${target}`
-      );
-      return { success: true, durationMs };
-    } catch (err) {
-      const durationMs = Date.now() - startTime;
+      const startTime = Date.now();
+      try {
+        const info = await transporter.sendMail(mailOptions);
+        const durationMs = Date.now() - startTime;
+        console.log(
+          `[SMTP SUCCESS] Sent verification email to ${target} in ${durationMs}ms. ` +
+          `Message ID: ${info.messageId}`
+        );
+        return { success: true, messageId: info.messageId, durationMs };
+      } catch (err) {
+        const durationMs = Date.now() - startTime;
+        console.error(
+          `[SMTP ERROR RESILIENCE] Dispatch failed after ${durationMs}ms ` +
+          `for ${target}: ${err.message}`
+        );
+        console.log(`=======================================================`);
+        console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
+        console.log(`=======================================================`);
+        return { success: true, fallback: true, code };
+      }
+    } else {
       console.warn(
-        `[HTTPS DISPATCH NOTICE] Direct HTTPS dispatch (${durationMs}ms): ${err.message}`
+        `[MAIL WARNING] Transporter unconfigured. Printing OTP to console.`
       );
       console.log(`=======================================================`);
-      console.log(` 📧 [EMAIL OTP FALLBACK LOG] Target: ${target} | CODE: ${code}`);
+      console.log(` 📧 [EMAIL OTP] Target: ${target} | CODE: ${code}`);
       console.log(`=======================================================`);
-      return { success: true, fallback: true, code };
+      return { success: true, debug: true };
     }
   } else {
     // Phone OTP
@@ -223,7 +280,7 @@ async function storeAndDispatchOtp(target, type) {
   const now = Date.now();
 
   try {
-    // Fully await the HTTPS email delivery before returning success status to client
+    // Fully await the email delivery before returning success status to client
     await sendOtpDelivery(normalizedTarget, type, code);
 
     // Record in store only after delivery confirmation
