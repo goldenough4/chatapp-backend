@@ -56,7 +56,7 @@ class CallsAdapter(private val callsList: List<CallLogItem>) :
             holder.directionIcon.setColorFilter(Color.parseColor("#00A884"))
         } else {
             holder.directionIcon.setImageResource(R.drawable.ic_call_incoming)
-            if (item.status == "answered" || item.status == "connected") {
+            if ((item.status == "answered") || (item.status == "connected")) {
                 holder.directionIcon.setColorFilter(Color.parseColor("#00A884"))
             } else {
                 holder.directionIcon.setColorFilter(Color.parseColor("#EA0038")) // Missed call
@@ -96,9 +96,9 @@ class CallsAdapter(private val callsList: List<CallLogItem>) :
         FirebaseFirestore.getInstance()
             .collection("users").document(otherPhone).get()
             .addOnSuccessListener { sn ->
-                if (sn != null && sn.exists()) {
+                if ((sn != null) && sn.exists()) {
                     val firestoreName = sn.getString("name") ?: ""
-                    if (firestoreName.isNotEmpty() && contactDisplayName == otherPhone) {
+                    if ((firestoreName.isNotEmpty()) && (contactDisplayName == otherPhone)) {
                         holder.nameText.text = firestoreName
                     }
                     val avatar = sn.getString("profileImageUrl") ?: ""
@@ -121,7 +121,7 @@ class CallsAdapter(private val callsList: List<CallLogItem>) :
             val pairs = mapString.split(";")
             for (pair in pairs) {
                 val parts = pair.split("|")
-                if (parts.size == 2 && parts[1].trim() == phoneNumber.trim()) {
+                if ((parts.size == 2) && (parts[1].trim() == phoneNumber.trim())) {
                     return parts[0]
                 }
             }
@@ -134,16 +134,16 @@ class CallsAdapter(private val callsList: List<CallLogItem>) :
         val now = Calendar.getInstance()
         val time = Calendar.getInstance().apply { time = date }
 
-        val sameDay = now.get(Calendar.YEAR) == time.get(Calendar.YEAR) &&
-                now.get(Calendar.DAY_OF_YEAR) == time.get(Calendar.DAY_OF_YEAR)
+        val sameDay = (now[Calendar.YEAR] == time[Calendar.YEAR]) &&
+                (now[Calendar.DAY_OF_YEAR] == time[Calendar.DAY_OF_YEAR])
 
         if (sameDay) {
             return SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
         }
 
         val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-        val isYesterday = yesterday.get(Calendar.YEAR) == time.get(Calendar.YEAR) &&
-                yesterday.get(Calendar.DAY_OF_YEAR) == time.get(Calendar.DAY_OF_YEAR)
+        val isYesterday = (yesterday[Calendar.YEAR] == time[Calendar.YEAR]) &&
+                (yesterday[Calendar.DAY_OF_YEAR] == time[Calendar.DAY_OF_YEAR])
 
         if (isYesterday) {
             return "Yesterday, " + SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)

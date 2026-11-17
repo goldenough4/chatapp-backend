@@ -34,13 +34,13 @@ class ChatService : Service() {
             .setContentText("Ensuring instant message delivery...")
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN) // Minimal intrusion
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
 
-        // Android 14 Fix: Explicitly declare Service Type
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                @Suppress("DEPRECATION")
                 startForeground(
                     notificationId,
                     notification,
@@ -65,7 +65,6 @@ class ChatService : Service() {
     private fun startListening(chatId: String) {
         listenerRegistration?.remove()
 
-        // Optimized Listener: We only care about new additions
         listenerRegistration = FirebaseFirestore.getInstance()
             .collection("chats").document(chatId).collection("messages")
             .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -76,9 +75,8 @@ class ChatService : Service() {
                     return@addSnapshotListener
                 }
 
-                // Trigger UI Refresh
                 val updateIntent = Intent("com.gold.chatapp.UPDATE_CHAT")
-                updateIntent.setPackage(packageName) // Security: only send to our app
+                updateIntent.setPackage(packageName)
                 sendBroadcast(updateIntent)
             }
     }

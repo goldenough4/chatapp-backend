@@ -21,6 +21,8 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.google.firebase.FirebaseApp
@@ -66,20 +68,20 @@ class MainActivity : AppCompatActivity() {
                 gApi.getErrorDialog(this, status, 9000)?.show()
             }
             FirebaseApp.initializeApp(this)
-        } catch (e: Exception) {
-            Log.e("FIREBASE_INIT", "Error: ${e.message}")
+        } catch (_: Exception) {
+            Log.e("FIREBASE_INIT", "Error initializing Firebase")
         }
 
         checkAndRequestPermissions()
         requestIgnoreBatteryOptimizations()
         ensureFcmTokenIsCurrent()
 
-        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.main_toolbar)
+        val toolbar = findViewById<MaterialToolbar>(R.id.main_toolbar)
         setSupportActionBar(toolbar)
 
         viewPager = findViewById(R.id.view_pager)
         tabLayout = findViewById(R.id.tab_layout)
-        val addContactButton = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.add_contact_button)
+        val addContactButton = findViewById<FloatingActionButton>(R.id.add_contact_button)
 
         val fragments = listOf(messagesFragment, storiesFragment, callsFragment)
         viewPager.adapter = object : FragmentStateAdapter(this) {
@@ -141,12 +143,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleNotificationIntent(intent: Intent?) {
         if (intent == null) return
 
-        // Handle System Share Intents
         if (intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE) {
-            // Logic: We are already in MainActivity. The user sees their chats.
-            // When they click a chat, we should pass the share data forward.
-            // For now, we'll store it in a temporary location or pass it via intent.
-            // Professional implementation: Show a "Share to..." toast or similar.
             Toast.makeText(this, "Select a chat to share", Toast.LENGTH_SHORT).show()
         }
 
@@ -156,11 +153,9 @@ class MainActivity : AppCompatActivity() {
             val chatIntent = Intent(this, ChatActivity::class.java).apply {
                 putExtra("other_phone", senderPhone)
                 putExtra("contact_name", contactName)
-                // Use singleTop behavior via flags to avoid clearing the activity stack
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
             startActivity(chatIntent)
-            // Clear the extra so it doesn't re-trigger on next resume
             intent.removeExtra("sender_phone")
         }
     }
@@ -219,7 +214,7 @@ class MainActivity : AppCompatActivity() {
             }
             try {
                 startActivity(intent)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 Log.e("BATTERY", "Optimization request failed")
             }
         }
@@ -264,7 +259,6 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         listenForIncomingCalls()
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
-        // Ensure token is always fresh when user returns to app
         fetchB2Token { token, dlUrl ->
             if (token.isNotEmpty()) {
                 prefs.edit {

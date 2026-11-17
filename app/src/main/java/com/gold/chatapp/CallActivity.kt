@@ -46,7 +46,7 @@ class CallActivity : AppCompatActivity() {
                     val initOptions =
                         PeerConnectionFactory.InitializationOptions.builder(context.applicationContext)
                             .setEnableInternalTracer(true)
-                            .createInitializationOptions()
+                    .createInitializationOptions()
                     PeerConnectionFactory.initialize(initOptions)
                 } catch (_: Exception) {
                 }
@@ -58,7 +58,7 @@ class CallActivity : AppCompatActivity() {
                         DefaultVideoEncoderFactory(
                             eglBase?.eglBaseContext,
                             true,
-                            true
+                            true,
                         )
                     )
                     .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase?.eglBaseContext))
@@ -137,7 +137,7 @@ class CallActivity : AppCompatActivity() {
                 callTimerHandler.postDelayed(this, 1000)
             }
         }
-        callTimerHandler.post(callTimerRunnable!!)
+        callTimerRunnable?.let { callTimerHandler.post(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -146,7 +146,7 @@ class CallActivity : AppCompatActivity() {
 
         // Acquire WakeLock to hardware wake up screen on sleep/locked state
         try {
-            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                val pm = getSystemService(PowerManager::class.java)
 
             @Suppress("DEPRECATION")
             val wl = pm?.newWakeLock(
@@ -161,7 +161,7 @@ class CallActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
-            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val km = getSystemService(KeyguardManager::class.java)
             km?.requestDismissKeyguard(this, null)
         } else {
             @Suppress("DEPRECATION")
@@ -176,12 +176,16 @@ class CallActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_call)
 
-        val prefs = getSharedPreferences("chat_app_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
         val rawMyPhone = prefs.getString("user_phone", "") ?: ""
         myPhone = if (rawMyPhone.contains("@")) rawMyPhone.trim().lowercase() else rawMyPhone.trim()
 
         val rawOtherPhone = intent.getStringExtra("other_phone") ?: ""
-        otherPhone = if (rawOtherPhone.contains("@")) rawOtherPhone.trim().lowercase() else rawOtherPhone.trim()
+        otherPhone = if (rawOtherPhone.contains("@")) {
+            rawOtherPhone.trim().lowercase()
+        } else {
+            rawOtherPhone.trim()
+        }
         contactName = intent.getStringExtra("contact_name") ?: otherPhone
         callType = intent.getStringExtra("call_type") ?: "voice"
         isIncoming = intent.getBooleanExtra("is_incoming", false)
@@ -192,7 +196,7 @@ class CallActivity : AppCompatActivity() {
             callId = "call_${sorted[0]}_${sorted[1]}"
         }
 
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager = getSystemService(AudioManager::class.java)
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vm.defaultVibrator
@@ -216,7 +220,7 @@ class CallActivity : AppCompatActivity() {
         try {
             val ringUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             ringtone = RingtoneManager.getRingtone(applicationContext, ringUri)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (true) {
                 ringtone?.audioAttributes = AudioAttributes.Builder()
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
@@ -252,8 +256,8 @@ class CallActivity : AppCompatActivity() {
     private fun listenForCallCancellation() {
         val callDoc = db.collection("calls").document(callId)
         callListener = callDoc.addSnapshotListener { sn, _ ->
-            if (sn != null && sn.exists()) {
-                val status = sn.get("status")?.toString() ?: ""
+            if ((sn != null) && sn.exists()) {
+                val status = sn.getString("status") ?: ""
                 if (status == "ended") {
                     stopRingingAndVibration()
                     endCall()
@@ -291,7 +295,7 @@ class CallActivity : AppCompatActivity() {
         contactNameText.text = contactName
 
         if (isIncoming) {
-            statusText.text = "Incoming $callType call..."
+            statusText.text = getString(R.string.incoming_call_format, callType)
             voiceControlsCard.isVisible = false
             incomingActionsLayout.isVisible = true
             // Mark call as ringing in Firestore so caller UI switches to "Ringing..." immediately
@@ -300,7 +304,7 @@ class CallActivity : AppCompatActivity() {
             } catch (_: Exception) {
             }
         } else {
-            statusText.text = "Calling..."
+            statusText.text = getString(R.string.calling)
             voiceControlsCard.isVisible = true
             incomingActionsLayout.isVisible = false
         }
@@ -343,7 +347,7 @@ class CallActivity : AppCompatActivity() {
             callListener?.remove()
             incomingActionsLayout.isVisible = false
             voiceControlsCard.isVisible = true
-            statusText.text = "Connecting..."
+            statusText.text = getString(R.string.connecting)
             checkCallPermissionsAndStart()
         }
 
@@ -454,7 +458,7 @@ class CallActivity : AppCompatActivity() {
                     surfaceTextureHelper =
                         SurfaceTextureHelper.create("CaptureThread", eglBase?.eglBaseContext)
                     val videoSource =
-                        peerConnectionFactory?.createVideoSource(videoCapturer!!.isScreencast)
+                        peerConnectionFactory?.createVideoSource(videoCapturer?.isScreencast ?: false)
                     videoCapturer?.initialize(
                         surfaceTextureHelper,
                         applicationContext,
@@ -514,18 +518,18 @@ class CallActivity : AppCompatActivity() {
                                     callProfileImage.isVisible = false
                                 }
                             } else if (state == PeerConnection.IceConnectionState.DISCONNECTED || state == PeerConnection.IceConnectionState.FAILED) {
-                                statusText.text = "Call Ended"
+                                statusText.text = getString(R.string.call_ended)
                                 endCall()
                             }
                         }
                     }
 
-                    override fun onIceConnectionReceivingChange(p0: Boolean) {}
-                    override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {}
-                    override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {}
-                    override fun onAddStream(p0: MediaStream?) {}
-                    override fun onRemoveStream(p0: MediaStream?) {}
-                    override fun onDataChannel(p0: DataChannel?) {}
+                    override fun onIceConnectionReceivingChange(receiving: Boolean) {}
+                    override fun onIceGatheringChange(gathering: PeerConnection.IceGatheringState?) {}
+                    override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
+                    override fun onAddStream(stream: MediaStream?) {}
+                    override fun onRemoveStream(stream: MediaStream?) {}
+                    override fun onDataChannel(dataChannel: DataChannel?) {}
                     override fun onRenegotiationNeeded() {}
                 })
 
@@ -561,7 +565,7 @@ class CallActivity : AppCompatActivity() {
             db.collection("users").document(otherPhone).get().addOnSuccessListener { sn ->
                 if (sn != null && sn.exists()) {
                     val calleeToken = sn.getString("fcmToken") ?: ""
-                    val prefs = getSharedPreferences("chat_app_prefs", Context.MODE_PRIVATE)
+                    val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
                     val myName = prefs.getString("user_name", "") ?: myPhone
                     if (calleeToken.isNotEmpty()) {
                         sendFcmV1CallNotification(calleeToken, myPhone, myName, callType, callId)
@@ -591,14 +595,14 @@ class CallActivity : AppCompatActivity() {
             // Listen for Answer and Ringing Status
             callListener = callDoc.addSnapshotListener { sn, _ ->
                 if (sn != null && sn.exists()) {
-                    val status = sn.get("status")?.toString() ?: ""
-                    if (status == "ringing") {
-                        runOnUiThread { statusText.text = "Ringing..." }
-                    } else if (status == "answered" || status == "connected") {
-                        runOnUiThread { statusText.text = "Connected" }
-                    } else if (status == "ended") {
-                        endCall()
-                        return@addSnapshotListener
+                    val status = sn.getString("status") ?: ""
+                    when (status) {
+                        "ringing" -> runOnUiThread { statusText.text = getString(R.string.ringing) }
+                        "answered", "connected" -> runOnUiThread { statusText.text = getString(R.string.connected) }
+                        "ended" -> {
+                            endCall()
+                            return@addSnapshotListener
+                        }
                     }
 
                     val answerMap = sn.get("answer") as? Map<*, *>
@@ -607,7 +611,7 @@ class CallActivity : AppCompatActivity() {
                         if (sdp.isNotEmpty()) {
                             val desc = SessionDescription(SessionDescription.Type.ANSWER, sdp)
                             peerConnection?.setRemoteDescription(SdpObserverAdapter(), desc)
-                            runOnUiThread { statusText.text = "Connected" }
+                            runOnUiThread { statusText.text = getString(R.string.connected) }
                         }
                     }
                 }
@@ -616,8 +620,8 @@ class CallActivity : AppCompatActivity() {
             // Listen for Callee ICE Candidates
             calleeCandidatesListener =
                 callDoc.collection("calleeCandidates").addSnapshotListener { snapshots, _ ->
-                    if (snapshots != null) {
-                        for (doc in snapshots.documentChanges) {
+                    snapshots?.let {
+                        for (doc in it.documentChanges) {
                             if (doc.type == com.google.firebase.firestore.DocumentChange.Type.ADDED) {
                                 try {
                                     val data = doc.document.data
@@ -665,18 +669,18 @@ class CallActivity : AppCompatActivity() {
                                         )
                                     }
                                     peerConnection?.createAnswer(object : SdpObserverAdapter() {
-                                        override fun onCreateSuccess(answerDesc: SessionDescription?) {
-                                            if (answerDesc == null) return
+                                        override fun onCreateSuccess(desc: SessionDescription?) {
+                                            if (desc == null) return
                                             peerConnection?.setLocalDescription(
                                                 SdpObserverAdapter(),
-                                                answerDesc
+                                                desc
                                             )
                                             val answerMapObj = hashMapOf(
                                                 "type" to "answer",
-                                                "sdp" to answerDesc.description
+                                                "sdp" to desc.description
                                             )
                                             callDoc.update("answer", answerMapObj)
-                                            runOnUiThread { statusText.text = "Connected" }
+                                            runOnUiThread { statusText.text = getString(R.string.connected) }
                                         }
                                     }, mediaConstraints)
                                 }
@@ -689,8 +693,8 @@ class CallActivity : AppCompatActivity() {
             // Listen for Caller ICE Candidates
             callerCandidatesListener =
                 callDoc.collection("callerCandidates").addSnapshotListener { snapshots, _ ->
-                    if (snapshots != null) {
-                        for (doc in snapshots.documentChanges) {
+                    snapshots?.let {
+                        for (doc in it.documentChanges) {
                             if (doc.type == com.google.firebase.firestore.DocumentChange.Type.ADDED) {
                                 try {
                                     val data = doc.document.data
@@ -878,9 +882,9 @@ class CallActivity : AppCompatActivity() {
     }
 
     open class SdpObserverAdapter : SdpObserver {
-        override fun onCreateSuccess(p0: SessionDescription?) {}
+        override fun onCreateSuccess(desc: SessionDescription?) {}
         override fun onSetSuccess() {}
-        override fun onCreateFailure(p0: String?) {}
-        override fun onSetFailure(p0: String?) {}
+        override fun onCreateFailure(error: String?) {}
+        override fun onSetFailure(error: String?) {}
     }
 }

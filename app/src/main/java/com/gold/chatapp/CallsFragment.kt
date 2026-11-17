@@ -1,5 +1,6 @@
 package com.gold.chatapp
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
@@ -49,6 +50,7 @@ class CallsFragment : Fragment() {
         }
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     private fun loadCalls() {
         val prefs = requireActivity().getSharedPreferences("chat_app_prefs", Context.MODE_PRIVATE)
         val myPhone = prefs.getString("user_phone", "") ?: ""
@@ -63,11 +65,11 @@ class CallsFragment : Fragment() {
                 if (snapshots != null) {
                     callsList.clear()
                     for (doc in snapshots) {
-                        val caller = doc.get("caller")?.toString() ?: ""
-                        val callee = doc.get("callee")?.toString() ?: ""
-                        if (caller == myPhone || callee == myPhone) {
-                            val callType = doc.get("callType")?.toString() ?: "voice"
-                            val status = doc.get("status")?.toString() ?: "ended"
+                        val caller = doc.getString("caller") ?: ""
+                        val callee = doc.getString("callee") ?: ""
+                        if ((caller == myPhone) || (callee == myPhone)) {
+                            val callType = doc.getString("callType") ?: "voice"
+                            val status = doc.getString("status") ?: "ended"
                             val timestampDate = parseSafeDate(doc.get("timestamp"))
 
                             callsList.add(
@@ -78,8 +80,8 @@ class CallsFragment : Fragment() {
                                     callType = callType,
                                     status = status,
                                     timestamp = timestampDate,
-                                    isOutgoing = caller == myPhone
-                                )
+                                    isOutgoing = caller == myPhone,
+                                ),
                             )
                         }
                     }

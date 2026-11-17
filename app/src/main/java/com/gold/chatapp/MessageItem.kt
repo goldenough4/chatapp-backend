@@ -39,9 +39,11 @@ class MessageItem {
     var timestamp: Date? = null
 
     // Required empty constructor for Firebase
+    @Suppress("unused")
     constructor()
 
     // Full constructor for manual creation
+    @Suppress("LongParameterList")
     constructor(
         documentId: String,
         sender: String,
@@ -80,7 +82,6 @@ class MessageItem {
         this.localTimestamp = localTimestamp
     }
 
-    // FIX: Added imageUrl, videoUrl, and text to equals to ensure UI refreshes on all changes
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is MessageItem) return false

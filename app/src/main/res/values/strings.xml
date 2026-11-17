@@ -31,4 +31,20 @@
     <string name="dev_otp_format">Dev Code: %1$s</string>
     <string name="resend_timer_format">Resend code in %1$ds</string>
     <string name="resend_code_now">Resend Code</string>
+
+    <string name="incoming_call_format">Incoming %1$s call...</string>
+    <string name="calling">Calling...</string>
+    <string name="connecting">Connecting...</string>
+    <string name="connected">Connected</string>
+    <string name="ringing">Ringing...</string>
+    <string name="call_ended">Call Ended</string>
+    <string name="microphone_muted">Microphone muted</string>
+    <string name="microphone_unmuted">Microphone unmuted</string>
+    <string name="speaker_on">Speaker turned ON</string>
+    <string name="speaker_off">Speaker turned OFF</string>
+    <string name="call_options_menu">Call options menu</string>
+    <string name="sharing_call_link">Sharing call link</string>
+    <string name="video_filters_coming_soon">Video filters coming soon</string>
+    <string name="permissions_required_for_call">Permissions required for call</string>
+    <string name="failed_to_start_call">Failed to start call</string>
 </resources>

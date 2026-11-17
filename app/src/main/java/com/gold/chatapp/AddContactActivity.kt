@@ -5,6 +5,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.firestore.FirebaseFirestore
@@ -25,40 +26,42 @@ class AddContactActivity : AppCompatActivity() {
 
         val firstNameInput = findViewById<TextInputEditText>(R.id.input_first_name)
         val lastNameInput = findViewById<TextInputEditText>(R.id.input_last_name)
-        val usernameInput = findViewById<TextInputEditText>(R.id.input_username)
         val phoneInput = findViewById<TextInputEditText>(R.id.input_phone)
         val emailInput = findViewById<TextInputEditText>(R.id.input_email)
         val countryCodeInput = findViewById<TextInputEditText>(R.id.input_country_code)
-        val syncSwitch = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switch_sync)
         val saveButton = findViewById<MaterialButton>(R.id.btn_save)
 
         saveButton.setOnClickListener {
             val firstName = firstNameInput.text?.toString()?.trim() ?: ""
             val lastName = lastNameInput.text?.toString()?.trim() ?: ""
-            val username = usernameInput.text?.toString()?.trim() ?: ""
             val rawPhone = phoneInput.text?.toString()?.trim() ?: ""
             val email = emailInput.text?.toString()?.trim() ?: ""
             val countryCode = countryCodeInput.text?.toString()?.trim() ?: ""
 
             if (firstName.isEmpty() || (rawPhone.isEmpty() && email.isEmpty())) {
-                Toast.makeText(this, "First name and either phone or email are required", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "First name and either phone or email are required",
+                    Toast.LENGTH_SHORT,
+                ).show()
             } else {
                 val fullName = if (lastName.isEmpty()) firstName else "$firstName $lastName"
                 val identifier = if (email.isNotEmpty()) {
                     email.lowercase()
                 } else {
-                    val fullPhone = if (rawPhone.startsWith("+")) rawPhone else "$countryCode$rawPhone"
+                    val fullPhone = if (rawPhone.startsWith("+")) {
+                        rawPhone
+                    } else {
+                        "$countryCode$rawPhone"
+                    }
                     fullPhone.replace(Regex("[\\s\\-()]"), "")
                 }
-                
                 searchAndSaveContact(fullName, identifier)
             }
         }
     }
 
     private fun searchAndSaveContact(name: String, identifier: String) {
-        // Search the global "users" collection for this phone number or email by document ID or field query,
-        // treating email and phone as equal and independent primary identifiers without forcing overrides.
         db.collection("users")
             .document(identifier)
             .get()
@@ -73,10 +76,18 @@ class AddContactActivity : AppCompatActivity() {
                         .get()
                         .addOnSuccessListener { querySnapshot ->
                             if (!querySnapshot.isEmpty) {
-                                Toast.makeText(this, "Contact added: $name", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    this,
+                                    "Contact added: $name",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                                 saveToPrefs(name, identifier)
                             } else {
-                                Toast.makeText(this, "User not registered, but added", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    this,
+                                    "User not registered, but added",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                                 saveToPrefs(name, identifier)
                             }
                         }
@@ -99,16 +110,13 @@ class AddContactActivity : AppCompatActivity() {
         val currentContacts =
             prefs.getStringSet("contacts", emptySet())?.toMutableSet() ?: mutableSetOf()
 
-        // 1. Remove any old entry for this exact identifier to prevent duplicate entries or stale names
         currentContacts.removeAll { entry ->
             val parts = entry.split("|")
-            parts.size >= 2 && parts[1].trim().lowercase() == identifierToUse
+            ((parts.size >= 2) && (parts[1].trim().lowercase() == identifierToUse))
         }
 
-        // 2. Add the updated contact entry
         currentContacts.add("$name|$identifierToUse")
 
-        // 3. Update the contacts_map (used for looking up names from identifiers)
         val mapString = prefs.getString("contacts_map", "") ?: ""
         val contactMap = mutableMapOf<String, String>()
 
@@ -129,13 +137,11 @@ class AddContactActivity : AppCompatActivity() {
             .filter { it.key.isNotEmpty() }
             .joinToString(";") { "${it.value}|${it.key}" }
 
-        // Use a fresh HashSet copy and synchronous commit() to guarantee instant memory & disk sync
-        prefs.edit()
-            .putStringSet("contacts", HashSet(currentContacts))
-            .putString("contacts_map", newMapString)
-            .commit()
+        prefs.edit {
+            putStringSet("contacts", HashSet(currentContacts))
+            putString("contacts_map", newMapString)
+        }
 
-        // Broadcast to update MessagesFragment & UI lists in real time
         val broadcastIntent = android.content.Intent("com.gold.chatapp.CONTACT_UPDATED").apply {
             putExtra("phone", identifierToUse)
             putExtra("name", name)

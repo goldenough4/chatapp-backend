@@ -3,7 +3,6 @@ package com.gold.chatapp
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -15,6 +14,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import androidx.core.content.ContextCompat
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -29,7 +29,6 @@ import java.net.URL
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
-        // Optimization: Cache B2 download token for high-speed notifications
         private var cachedToken: String? = null
         private var tokenExpiry: Long = 0L
     }
@@ -161,7 +160,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun getB2DownloadToken(): String? {
-        // Optimization: Use cached token if valid to prevent network delay on every message
         val now = System.currentTimeMillis()
         if (cachedToken != null && now < tokenExpiry) {
             return cachedToken
@@ -179,7 +177,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 val token = json.optString("authorizationToken", "")
                 if (token.isEmpty()) return null
                 
-                // Cache for 23 hours (B2 tokens usually last 24h)
                 cachedToken = token
                 tokenExpiry = now + (23 * 60 * 60 * 1000L)
                 token
@@ -217,7 +214,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
     private fun getCircularBitmap(bitmap: Bitmap): Bitmap {
-        val size = Math.min(bitmap.width, bitmap.height)
+        val size = minOf(bitmap.width, bitmap.height)
         val output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(output)
         val paint = android.graphics.Paint().apply {
@@ -246,7 +243,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     private fun getDefaultUserBitmap(): Bitmap {
         return try {
-            val drawable = androidx.core.content.ContextCompat.getDrawable(this, R.drawable.ic_default_user)
+            val drawable = ContextCompat.getDrawable(this, R.drawable.ic_default_user)
             val bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(bitmap)
             drawable?.setBounds(0, 0, canvas.width, canvas.height)
@@ -305,15 +302,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val circularIconBitmap = if (largeIcon != null) {
-            getCircularBitmap(largeIcon)
-        } else {
-            getDefaultUserBitmap()
-        }
+        val circularIconBitmap = largeIcon?.let {
+            getCircularBitmap(it)
+        } ?: getDefaultUserBitmap()
 
         val personIcon = IconCompat.createWithBitmap(circularIconBitmap)
 
-        val displayTitle = if (title.isNotBlank()) title else if (senderPhone.isNotBlank()) senderPhone else "Message"
+        val displayTitle = when {
+            title.isNotBlank() -> title
+            senderPhone.isNotBlank() -> senderPhone
+            else -> "Message"
+        }
         val shortcutIdKey = if (senderPhone.isNotBlank()) senderPhone else "chat_shortcut"
 
         val contactPerson = Person.Builder()
@@ -366,7 +365,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun updateStatusToDelivered(senderPhone: String) {
-        val prefs = getSharedPreferences("chat_app_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
         val myPhone = prefs.getString("user_phone", "") ?: ""
         if (myPhone.isNotEmpty()) {
             val sorted = listOf(myPhone, senderPhone).sorted()
@@ -395,7 +394,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun getLocalContactName(phoneNumber: String, payloadName: String = ""): String {
-        val prefs = getSharedPreferences("contacts_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("contacts_prefs", MODE_PRIVATE)
         val mapString = prefs.getString("contacts_map", "") ?: ""
         if (mapString.isNotEmpty()) {
             val pairs = mapString.split(";")
@@ -409,7 +408,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        val prefs = getSharedPreferences("chat_app_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
         val myPhone = prefs.getString("user_phone", "") ?: ""
         if (myPhone.isNotEmpty()) {
             FirebaseFirestore.getInstance().collection("users")

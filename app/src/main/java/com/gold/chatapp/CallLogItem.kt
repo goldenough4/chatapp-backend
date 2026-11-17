@@ -9,5 +9,5 @@ data class CallLogItem(
     val callType: String = "voice",
     val status: String = "ended",
     val timestamp: Date? = null,
-    val isOutgoing: Boolean = true
+    val isOutgoing: Boolean = true,
 )

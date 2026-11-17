@@ -9,6 +9,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
+@Suppress("unused")
 object BackblazeHelper {
 
     private const val KEY_ID = "005cb4d249b27e40000000001"
@@ -162,7 +163,11 @@ object BackblazeHelper {
             ProgressRequestBody(
                 baseBody,
                 object : ProgressRequestBody.UploadProgressListener {
-                    override fun onProgress(bytesWritten: Long, contentLength: Long, elapsedMs: Long) {
+                    override fun onProgress(
+                        bytesWritten: Long,
+                        contentLength: Long,
+                        elapsedMs: Long,
+                    ) {
                         if (contentLength > 0) {
                             val percentage = ((bytesWritten * 100) / contentLength).toInt()
                             onProgress(percentage)

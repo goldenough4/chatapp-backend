@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -22,16 +23,18 @@ class MessagesAdapter(
     private val selectedIds = mutableSetOf<String>()
     var onSelectionChanged: ((Boolean) -> Unit)? = null
 
-    fun isSelectionMode() = selectedIds.isNotEmpty()
-    fun getSelectedCount() = selectedIds.size
-    fun getSelectedIds() = selectedIds.toList()
+    fun isSelectionMode(): Boolean = selectedIds.isNotEmpty()
+    fun getSelectedCount(): Int = selectedIds.size
+    fun getSelectedIds(): List<String> = selectedIds.toList()
 
+    @SuppressLint("NotifyDataSetChanged")
     fun clearSelection() {
         selectedIds.clear()
         notifyDataSetChanged()
         onSelectionChanged?.invoke(false)
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     fun selectAll() {
         selectedIds.clear()
         selectedIds.addAll(contacts.map { it.id })
@@ -61,7 +64,6 @@ class MessagesAdapter(
     private fun getAuthorizedUrl(url: String?): Any {
         if (url.isNullOrEmpty()) return R.drawable.ic_default_user
 
-        // Secure access to private B2 profile images with guaranteed 100% token usage
         if (url.contains("backblazeb2.com") && b2Token.isNotEmpty()) {
             return try {
                 GlideUrl(
@@ -70,7 +72,7 @@ class MessagesAdapter(
                         .addHeader("Authorization", b2Token)
                         .build(),
                 )
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 url
             }
         }
@@ -84,7 +86,6 @@ class MessagesAdapter(
         holder.lastMessage.text = contact.lastMessage.ifEmpty { "No messages yet" }
         holder.contactTime.text = contact.lastMessageTime
 
-        // Load Profile Image with B2 Authorization - This ensures private bucket images show up
         val profileSource = getAuthorizedUrl(contact.profileImageUrl)
 
         Glide.with(holder.itemView.context)
@@ -95,7 +96,7 @@ class MessagesAdapter(
             .into(holder.profileImage)
 
         holder.profileImage.setOnClickListener {
-            val activity = holder.itemView.context as? androidx.appcompat.app.AppCompatActivity
+            val activity = holder.itemView.context as? AppCompatActivity
             activity?.let {
                 ProfilePopupDialog.newInstance(
                     id = contact.id,
@@ -106,10 +107,9 @@ class MessagesAdapter(
             }
         }
 
-        // Selection UI feedback
         val isSelected = selectedIds.contains(contact.id)
         holder.itemView.setBackgroundColor(
-            if (isSelected) 0x33075E54.toInt() else 0 // 20% opacity WhatsApp teal highlight
+            if (isSelected) 0x33075E54 else 0
         )
 
         holder.itemView.setOnLongClickListener {

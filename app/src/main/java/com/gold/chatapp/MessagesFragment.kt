@@ -2,20 +2,29 @@ package com.gold.chatapp
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
+import android.view.ActionMode
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.edit
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
@@ -31,25 +40,24 @@ class MessagesFragment : Fragment() {
 
     private val activeListeners = mutableMapOf<String, ListenerRegistration>()
     private var currentB2Token: String = ""
-    private var lastLoadTime = 0L
 
     private lateinit var searchInput: EditText
     private lateinit var clearSearch: ImageView
 
-    private var actionMode: android.view.ActionMode? = null
+    private var actionMode: ActionMode? = null
 
-    private val actionModeCallback = object : android.view.ActionMode.Callback {
-        override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+    private val actionModeCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
             mode?.menuInflater?.inflate(R.menu.chat_selection_menu, menu)
             return true
         }
 
-        override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+        override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
             mode?.title = "${adapter.getSelectedCount()} selected"
             return true
         }
 
-        override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?): Boolean {
+        override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
             return when (item?.itemId) {
                 R.id.action_pin_chat -> {
                     Toast.makeText(context, "Chat pinned", Toast.LENGTH_SHORT).show()
@@ -79,7 +87,7 @@ class MessagesFragment : Fragment() {
                     val selectedIds = adapter.getSelectedIds()
                     if (selectedIds.isNotEmpty()) {
                         val firstPhone = selectedIds.first()
-                        val intent = android.content.Intent(context, ContactInfoActivity::class.java).apply {
+                        val intent = Intent(context, ContactInfoActivity::class.java).apply {
                             putExtra("contact_phone", firstPhone)
                             putExtra("contact_name", getLocalContactName(firstPhone))
                         }
@@ -127,7 +135,7 @@ class MessagesFragment : Fragment() {
             }
         }
 
-        override fun onDestroyActionMode(mode: android.view.ActionMode?) {
+        override fun onDestroyActionMode(mode: ActionMode?) {
             adapter.clearSelection()
             actionMode = null
         }
@@ -183,7 +191,7 @@ class MessagesFragment : Fragment() {
         if (actionMode == null) {
             actionMode = activity?.startActionMode(actionModeCallback)
         }
-        actionMode?.invalidate() // Update title
+        actionMode?.invalidate()
     }
 
     private fun finishSelectionMode() {
@@ -191,7 +199,7 @@ class MessagesFragment : Fragment() {
     }
 
     private fun showDeleteConfirmationDialog() {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        AlertDialog.Builder(requireContext())
             .setTitle("Delete this chat?")
             .setMessage("Messages will be removed from this device.")
             .setPositiveButton("Delete Chat") { _, _ ->
@@ -207,20 +215,16 @@ class MessagesFragment : Fragment() {
         val currentContacts = prefs.getStringSet("contacts", emptySet())?.toMutableSet() ?: mutableSetOf()
 
         for (id in selectedIds) {
-            // 1. Remove from local preferences
             currentContacts.removeAll { it.contains(id) }
-            
-            // 2. Remove from internal list and listeners
             contactsList.removeAll { it.id == id }
             activeListeners["user_$id"]?.remove()
             activeListeners.remove("user_$id")
-            
-            // Note: We don't delete Firestore data here to preserve it for the other user.
         }
 
-        prefs.edit().putStringSet("contacts", currentContacts).apply()
+        prefs.edit {
+            putStringSet("contacts", currentContacts)
+        }
         
-        // Update the contacts_map as well
         val mapString = prefs.getString("contacts_map", "") ?: ""
         val contactMap = mutableMapOf<String, String>()
         if (mapString.isNotEmpty()) {
@@ -232,7 +236,9 @@ class MessagesFragment : Fragment() {
                 contactMap.remove(id)
             }
             val newMapString = contactMap.entries.joinToString(";") { "${it.value}|${it.key}" }
-            prefs.edit().putString("contacts_map", newMapString).apply()
+            prefs.edit {
+                putString("contacts_map", newMapString)
+            }
         }
 
         adapter.clearSelection()
@@ -257,7 +263,7 @@ class MessagesFragment : Fragment() {
     }
 
     private val contactUpdateReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: android.content.Intent?) {
+        override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.gold.chatapp.CONTACT_UPDATED") {
                 loadContacts()
             }
@@ -266,12 +272,12 @@ class MessagesFragment : Fragment() {
 
     override fun onStart() {
         super.onStart()
-        val filter = android.content.IntentFilter("com.gold.chatapp.CONTACT_UPDATED")
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            requireContext().registerReceiver(contactUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        val filterIntent = IntentFilter("com.gold.chatapp.CONTACT_UPDATED")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requireContext().registerReceiver(contactUpdateReceiver, filterIntent, Context.RECEIVER_NOT_EXPORTED)
         } else {
             @SuppressLint("UnspecifiedRegisterReceiverFlag")
-            requireContext().registerReceiver(contactUpdateReceiver, filter)
+            requireContext().registerReceiver(contactUpdateReceiver, filterIntent)
         }
     }
 
@@ -312,7 +318,6 @@ class MessagesFragment : Fragment() {
 
         Log.d("CONTACTS", "Loading contacts. Count: ${savedContacts.size}")
 
-        // Remove old listeners to prevent memory leaks and duplicate updates
         for (listener in activeListeners.values) listener.remove()
         activeListeners.clear()
         
@@ -348,7 +353,6 @@ class MessagesFragment : Fragment() {
         contactsList.addAll(tempContacts)
         sortContactsByTime()
 
-        // Attach listeners AFTER initial list population and rendering to eliminate snapshot race conditions
         for (chatItem in contactsList) {
             setupListenersForContact(chatItem.id, myCleanId)
         }
@@ -369,7 +373,6 @@ class MessagesFragment : Fragment() {
     }
 
     private fun setupListenersForContact(otherPhone: String, myPhone: String) {
-        // 1. Profile Picture & Name Listener (Sync from Server)
         val userListener = db.collection("users").document(otherPhone)
             .addSnapshotListener { snapshot, _ ->
                 if ((snapshot != null) && snapshot.exists()) {
@@ -389,7 +392,6 @@ class MessagesFragment : Fragment() {
             }
         activeListeners["user_$otherPhone"] = userListener
 
-        // 2. Real-time Last Message & Sorting Listener
         val sortedPhones = listOf(myPhone, otherPhone).sorted()
         val chatId = "chat_${sortedPhones[0]}_${sortedPhones[1]}"
 
@@ -416,7 +418,7 @@ class MessagesFragment : Fragment() {
 
                     val rawTs = doc.get("timestamp")
                     val timeInMillis = when (rawTs) {
-                        is com.google.firebase.Timestamp -> rawTs.toDate().time
+                        is Timestamp -> rawTs.toDate().time
                         is Long -> rawTs
                         is Double -> rawTs.toLong()
                         is Number -> rawTs.toLong()
@@ -430,7 +432,6 @@ class MessagesFragment : Fragment() {
                         contact.lastTimestamp = timeInMillis
                     }
 
-                    // Re-sort the list so newest conversations jump to the top
                     sortContactsByTime()
                 }
             }

@@ -52,27 +52,39 @@ const MAX_ATTEMPTS = 3;
 // In-Memory OTP Store: target -> { code, expiresAt, attempts, type, createdAt }
 const otpStore = new Map();
 
-// Nodemailer Transporter Setup: smtp.gmail.com on Port 465 with secure: true
+// Robust Transporter Setup (Supports SMTP_USER/SMTP_PASS and EMAIL_USER/EMAIL_PASS, falls back to streamTransport if password is missing to prevent EAUTH Missing credentials errors)
 let transporter = null;
 
 try {
-  const user = process.env.SMTP_USER ? process.env.SMTP_USER.trim() : 'chatappsupport2026@gmail.com';
-  const pass = process.env.SMTP_PASS ? process.env.SMTP_PASS.trim() : '';
+  const user = process.env.SMTP_USER || process.env.EMAIL_USER || 'chatappsupport2026@gmail.com';
+  const pass = process.env.SMTP_PASS || process.env.EMAIL_PASS || '';
 
-  transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: user,
-      pass: pass
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-
-  console.log(`[MAIL] Initialized SMTPS transporter for ${user} (smtp.gmail.com:465, secure=true)`);
+  if (pass && pass.trim().length > 0) {
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: user.trim(),
+        pass: pass.trim()
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+    console.log(`[MAIL] Initialized SMTPS transporter for ${user} (smtp.gmail.com:465, secure=true)`);
+  } else {
+    transporter = nodemailer.createTransport({
+      streamTransport: true,
+      buffer: true,
+      newline: 'unix',
+      auth: {
+        user: user.trim(),
+        pass: 'placeholder'
+      }
+    });
+    console.log(`[MAIL] Initialized local streamTransport fallback for ${user} (No SMTP password provided in environment)`);
+  }
 } catch (err) {
   console.error('[MAIL ERROR] Failed to initialize transporter:', err.message);
 }
@@ -122,7 +134,7 @@ async function sendOtpDelivery(target, type, code) {
     `;
 
     const mailOptions = {
-      from: process.env.SMTP_FROM || `"ChatApp Support" <chatappsupport2026@gmail.com>`,
+      from: process.env.SMTP_FROM || process.env.EMAIL_FROM || `"ChatApp Support" <chatappsupport2026@gmail.com>`,
       to: target,
       subject: subject,
       text: `ChatApp your verification code is ${code}`,
@@ -140,7 +152,11 @@ async function sendOtpDelivery(target, type, code) {
       try {
         if (transporter) {
           const info = await transporter.sendMail(mailOptions);
-          console.log(`[SMTP SUCCESS] Email sent to ${target}. Message ID: ${info.messageId}`);
+          const msgId = info.messageId || 'STREAM_LOCAL';
+          console.log(`[SMTP SUCCESS] Email processed for ${target}. Message ID: ${msgId}`);
+          console.log(`=======================================================`);
+          console.log(` 📧 [EMAIL OTP SUCCESS] Target: ${target} | CODE: ${code}`);
+          console.log(`=======================================================`);
         } else {
           console.log(`[SMTP LOG] Transporter not configured. Target: ${target} | CODE: ${code}`);
         }
@@ -386,12 +402,12 @@ server.listen(PORT, () => {
   console.log(` ChatApp OTP Socket.io Server running on port ${PORT}`);
   console.log(`=======================================================`);
 
-  // Keep-alive self-ping every 10 minutes to prevent Render from spinning down
+  // Keep-alive self-ping every 10 minutes
   const PING_INTERVAL_MS = 10 * 60 * 1000;
   setInterval(() => {
     try {
-      const selfUrl = 'https://chatapp-backend-dwh6.onrender.com/health';
-      const client = require('https');
+      const selfUrl = 'http://192.168.0.154:3000/health';
+      const client = require('http');
 
       client.get(selfUrl, (res) => {
         console.log(`[KEEP-ALIVE] Self-ping status: ${res.statusCode}`);

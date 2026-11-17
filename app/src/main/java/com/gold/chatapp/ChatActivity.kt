@@ -9,15 +9,15 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.core.graphics.scale
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import java.io.FileOutputStream
 import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.media.MediaRecorder
-import android.media.ToneGenerator
 import android.media.MediaScannerConnection
-import androidx.core.net.toUri
+import android.media.ToneGenerator
 import android.net.Uri
 import android.os.*
 import android.util.Base64
@@ -31,18 +31,18 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
-
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MetadataChanges
-import com.google.auth.oauth2.GoogleCredentials
+import com.google.firebase.firestore.Query
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -75,54 +75,72 @@ class ChatActivity : AppCompatActivity() {
     private var messageActionMode: android.view.ActionMode? = null
 
     private val messageActionModeCallback = object : android.view.ActionMode.Callback {
-        override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+        override fun onCreateActionMode(
+            mode: android.view.ActionMode?,
+            menu: android.view.Menu?
+        ): Boolean {
             mode?.menuInflater?.inflate(R.menu.message_selection_menu, menu)
             return true
         }
 
-        override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+        override fun onPrepareActionMode(
+            mode: android.view.ActionMode?,
+            menu: android.view.Menu?
+        ): Boolean {
             val count = chatAdapter.getSelectedCount()
-            mode?.title = "$count"
+            mode?.title = count.toString()
             return true
         }
 
-        override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?): Boolean {
+        override fun onActionItemClicked(
+            mode: android.view.ActionMode?,
+            item: android.view.MenuItem?
+        ): Boolean {
             return when (item?.itemId) {
                 R.id.action_reply_msg -> {
-                    Toast.makeText(this@ChatActivity, "Replying to message", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ChatActivity, "Replying to message", Toast.LENGTH_SHORT)
+                        .show()
                     mode?.finish()
                     true
                 }
+
                 R.id.action_star_msg -> {
                     Toast.makeText(this@ChatActivity, "Starred", Toast.LENGTH_SHORT).show()
                     mode?.finish()
                     true
                 }
+
                 R.id.action_delete_msg -> {
                     Toast.makeText(this@ChatActivity, "Message deleted", Toast.LENGTH_SHORT).show()
                     mode?.finish()
                     true
                 }
+
                 R.id.action_share_msg, R.id.action_overflow_share -> {
                     Toast.makeText(this@ChatActivity, "Sharing message", Toast.LENGTH_SHORT).show()
                     mode?.finish()
                     true
                 }
+
                 R.id.action_pin_msg -> {
                     Toast.makeText(this@ChatActivity, "Message pinned", Toast.LENGTH_SHORT).show()
                     mode?.finish()
                     true
                 }
+
                 R.id.action_verify_security_code -> {
-                    Toast.makeText(this@ChatActivity, "Security code verified", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ChatActivity, "Security code verified", Toast.LENGTH_SHORT)
+                        .show()
                     mode?.finish()
                     true
                 }
+
                 R.id.action_report_msg -> {
                     Toast.makeText(this@ChatActivity, "Report submitted", Toast.LENGTH_SHORT).show()
                     mode?.finish()
                     true
                 }
+
                 else -> false
             }
         }
@@ -324,7 +342,7 @@ class ChatActivity : AppCompatActivity() {
             val pairs = mapString.split(";")
             for (pair in pairs) {
                 val parts = pair.split("|")
-                if (parts.size == 2 && parts[1].trim() == phoneNumber.trim()) return parts[0]
+                if ((parts.size == 2) && (parts[1].trim() == phoneNumber.trim())) return parts[0]
             }
         }
         return phoneNumber
@@ -351,7 +369,8 @@ class ChatActivity : AppCompatActivity() {
         myId = if (rawMyId.contains("@")) rawMyId.trim().lowercase() else rawMyId.trim()
 
         val rawOther = intent.getStringExtra("other_phone") ?: ""
-        otherUserPhone = if (rawOther.contains("@")) rawOther.trim().lowercase() else rawOther.trim()
+        otherUserPhone =
+            if (rawOther.contains("@")) rawOther.trim().lowercase() else rawOther.trim()
         chatNameHeader = findViewById(R.id.chat_name)
         refreshChatHeader()
 
@@ -470,7 +489,7 @@ class ChatActivity : AppCompatActivity() {
                             width = (maxDim * ratio).toInt()
                         }
                     }
-                    val resized = Bitmap.createScaledBitmap(originalBitmap, width, height, true)
+                    val resized = originalBitmap.scale(width, height, true)
                     val targetFolder = getPublicMediaFolder("Images")
                     val outFile = File(targetFolder, "IMG_COMP_${System.currentTimeMillis()}.jpg")
                     FileOutputStream(outFile).use { fos ->
@@ -500,7 +519,7 @@ class ChatActivity : AppCompatActivity() {
             "Video" -> StorageHelper.getMediaFolderWithDate(this, StorageHelper.MEDIA_VIDEO)
             "Voice Notes" -> StorageHelper.getMediaFolderWithDate(
                 this,
-                StorageHelper.MEDIA_VOICE_NOTES
+                StorageHelper.MEDIA_VOICE_NOTES,
             )
 
             "Documents" -> StorageHelper.getMediaFolderWithDate(this, StorageHelper.MEDIA_DOCUMENTS)
@@ -633,8 +652,6 @@ class ChatActivity : AppCompatActivity() {
             timestamp = Date(),
             uploadProgress = 0,
             localPath = uri.toString(),
-            timeRemaining = null,
-            localTimestamp = System.currentTimeMillis()
         )
         val existingIndex = messagesList.indexOfFirst { it.documentId == docId }
         if (existingIndex == -1) {
@@ -648,13 +665,14 @@ class ChatActivity : AppCompatActivity() {
                 Thread {
                     try {
                         if (cachedUploadUrl == null) fetchUploadUrlSync()
-                        
+
                         val compressedFile = prepareCompressedMedia(uri, type)
                         val uploadFile = compressedFile ?: File(uri.path ?: "")
                         val bytes = if (uploadFile.exists()) {
                             uploadFile.readBytes()
                         } else {
-                            contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@Thread
+                            contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                ?: return@Thread
                         }
 
                         val extension = if (type == "image") "jpg" else "mp4"
@@ -726,7 +744,11 @@ class ChatActivity : AppCompatActivity() {
                         client.newCall(request).execute().use { response ->
                             if (response.isSuccessful) {
                                 val bodyStr = response.body?.string() ?: ""
-                                val upName = try { JSONObject(bodyStr).optString("fileName", fileName) } catch (_: Exception) { fileName }
+                                val upName = try {
+                                    JSONObject(bodyStr).optString("fileName", fileName)
+                                } catch (_: Exception) {
+                                    fileName
+                                }
                                 val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                                 runOnUiThread {
                                     val updates = if (type == "image") {
@@ -748,7 +770,11 @@ class ChatActivity : AppCompatActivity() {
                                         .document(docId).update(updates)
                                         .addOnSuccessListener {
                                             activeUploads.remove(docId)
-                                            val msgText = if (type == "image") "Sent a photo" else "Sent a video"
+                                            val msgText = if (type == "image") {
+                                                "Sent a photo"
+                                            } else {
+                                                "Sent a video"
+                                            }
                                             sendNotificationToRecipient(msgText)
                                         }
                                         .addOnFailureListener { ex ->
@@ -848,7 +874,8 @@ class ChatActivity : AppCompatActivity() {
                     }
 
                     if ((message.sender != myId) && (message.status < 3)) {
-                        // Symmetrical: Symmetrically auto-mark all message types (including voice/media) as read/seen if active in chat screen
+                        // Symmetrical: Symmetrically auto-mark all message types
+                        // (including voice/media) as read/seen if active in chat screen
                         val messageDoc = db.collection("chats")
                             .document(chatId)
                             .collection("messages")
@@ -1124,7 +1151,9 @@ class ChatActivity : AppCompatActivity() {
                                     }
 
                                     val now = System.currentTimeMillis()
-                                    if (p != lastPercent && (now - lastUpdate > 500 || p % 5 == 0)) {
+                                    if (p != lastPercent &&
+                                        (now - lastUpdate > 500 || p % 5 == 0)
+                                    ) {
                                         lastUpdate = now
                                         lastPercent = p
 
@@ -1168,7 +1197,11 @@ class ChatActivity : AppCompatActivity() {
                         client.newCall(req).execute().use { response ->
                             if (response.isSuccessful) {
                                 val bodyStr = response.body?.string() ?: ""
-                                val upName = try { JSONObject(bodyStr).optString("fileName", "voice.m4a") } catch (_: Exception) { "voice.m4a" }
+                                val upName = try {
+                                    JSONObject(bodyStr).optString("fileName", "voice.m4a")
+                                } catch (_: Exception) {
+                                    "voice.m4a"
+                                }
                                 val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                                 runOnUiThread {
                                     activeUploads.remove(docId)
@@ -1210,7 +1243,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun retryUploadMedia(docId: String, uri: Uri, type: String) {
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
-        val myProfilePic = prefs.getString("profileImageUrl", "") ?: ""
+        prefs.getString("profileImageUrl", "") ?: ""
         Thread {
             try {
                 if (cachedUploadUrl == null) fetchUploadUrlSync()
@@ -1276,7 +1309,11 @@ class ChatActivity : AppCompatActivity() {
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val bodyStr = response.body?.string() ?: ""
-                        val upName = try { JSONObject(bodyStr).optString("fileName", fileName) } catch (_: Exception) { fileName }
+                        val upName = try {
+                            JSONObject(bodyStr).optString("fileName", fileName)
+                        } catch (_: Exception) {
+                            fileName
+                        }
                         val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                         val updates = if (type == "image") {
                             mapOf(
@@ -1297,7 +1334,8 @@ class ChatActivity : AppCompatActivity() {
                             .document(docId)
                             .update(updates).addOnSuccessListener {
                                 activeUploads.remove(docId)
-                                val msgText = if (type == "image") "Sent a photo" else "Sent a video"
+                                val msgText =
+                                    if (type == "image") "Sent a photo" else "Sent a video"
                                 sendNotificationToRecipient(msgText)
                             }
                     } else {
@@ -1317,7 +1355,7 @@ class ChatActivity : AppCompatActivity() {
     private fun retryUploadAudio(docId: String, path: String) {
         val file = File(path)
         val prefs = getSharedPreferences("chat_app_prefs", MODE_PRIVATE)
-        val myProfilePic = prefs.getString("profileImageUrl", "") ?: ""
+        prefs.getString("profileImageUrl", "") ?: ""
         Thread {
             try {
                 if (cachedUploadUrl == null) fetchUploadUrlSync()
@@ -1375,7 +1413,11 @@ class ChatActivity : AppCompatActivity() {
                 client.newCall(req).execute().use { response ->
                     if (response.isSuccessful) {
                         val bodyStr = response.body?.string() ?: ""
-                        val upName = try { JSONObject(bodyStr).optString("fileName", "voice.m4a") } catch (_: Exception) { "voice.m4a" }
+                        val upName = try {
+                            JSONObject(bodyStr).optString("fileName", "voice.m4a")
+                        } catch (_: Exception) {
+                            "voice.m4a"
+                        }
                         val finalUrl = "$b2DownloadUrl/file/$b2BucketName/$upName"
                         db.collection("chats").document(chatId).collection("messages")
                             .document(docId).update(
@@ -1454,7 +1496,7 @@ class ChatActivity : AppCompatActivity() {
         val myName = prefs.getString("user_name", "") ?: ""
 
         if (!recipientToken.isNullOrEmpty()) {
-            sendFcmV1Notification(recipientToken!!, myId, myName, messageText, myProfilePic)
+            sendFcmV1Notification(recipientToken ?: "", myId, myName, messageText, myProfilePic)
         } else {
             db.collection("users").document(otherUserPhone).get().addOnSuccessListener { snapshot ->
                 if (snapshot != null && snapshot.exists()) {

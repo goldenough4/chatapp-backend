@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 object OtpSocketManager {
 
     private const val TAG = "OTP_REST_CLIENT"
-    private const val PRODUCTION_SERVER_URL = "https://chatapp-backend-dwh6.onrender.com"
+    private const val PRODUCTION_SERVER_URL = "http://192.168.0.154:3000"
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val httpClient = OkHttpClient.Builder()
@@ -25,7 +25,7 @@ object OtpSocketManager {
         .build()
 
     fun requestOtp(
-        context: Context,
+        @Suppress("UNUSED_PARAMETER") context: Context,
         target: String,
         type: String,
         callback: (success: Boolean, message: String, debugOtp: String?) -> Unit,
@@ -103,7 +103,7 @@ object OtpSocketManager {
     }
 
     fun verifyOtp(
-        context: Context,
+        @Suppress("UNUSED_PARAMETER") context: Context,
         target: String,
         otp: String,
         callback: (success: Boolean, message: String) -> Unit,
@@ -180,7 +180,7 @@ object OtpSocketManager {
     }
 
     fun resendOtp(
-        context: Context,
+        @Suppress("UNUSED_PARAMETER") context: Context,
         target: String,
         type: String,
         callback: (success: Boolean, message: String, debugOtp: String?) -> Unit,
